@@ -2,7 +2,7 @@ body {
   font-family: system-ui, -apple-system, sans-serif;
   max-width: 1200px;
   margin: 0 auto;
-  padding: 20px;
+  padding: 12px;
   background: #ffffff;
   color: #000000;
 }
@@ -12,12 +12,31 @@ body.dark {
   color: #f3f4f6;
 }
 
+/* Header */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.page-title {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0;
+  color: #1f2937;
+}
+
+body.dark .page-title {
+  color: #f3f4f6;
+}
+
 /* Toolbar */
 .toolbar {
-  margin-bottom: 20px;
+  margin-bottom: 12px;
   background: #f9fafb;
-  border-radius: 10px;
-  padding: 12px;
+  border-radius: 8px;
+  padding: 8px;
   border: 1px solid #e5e7eb;
 }
 
@@ -28,28 +47,43 @@ body.dark .toolbar {
 
 .nav-bar {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
+}
+
+.url-form-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 4px;
 }
 
 .url-form {
   display: flex;
-  flex: 1;
   gap: 8px;
-  flex-direction: column;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+}
+
+.url-input-wrapper {
   position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  display: block;
 }
 
 .url-form input[type="text"] {
-  flex: 1;
-  padding: 8px 12px;
+  width: 100%;
+  padding: 8px 36px 8px 12px;
   font-size: 15px;
   border: 1px solid #d1d5db;
   border-radius: 6px;
   background: #ffffff;
   color: #000000;
   transition: border-color 0.2s;
+  box-sizing: border-box;
 }
 
 .url-form input[type="text"].error {
@@ -69,12 +103,34 @@ body.dark .url-form input[type="text"].error {
 .url-error {
   font-size: 12px;
   color: #dc2626;
-  margin-top: -4px;
   padding: 0 4px;
 }
 
 body.dark .url-error {
   color: #fca5a5;
+}
+
+.submit-btn {
+  padding: 8px 16px;
+  background: #2563eb;
+  color: white;
+  border-radius: 6px;
+  font-weight: 500;
+  min-height: 36px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.submit-btn:hover {
+  background: #1d4ed8;
+}
+
+body.dark .submit-btn {
+  background: #3b82f6;
+}
+
+body.dark .submit-btn:hover {
+  background: #2563eb;
 }
 
 /* Buttons */
@@ -183,12 +239,15 @@ body.dark .tool-btn:hover {
 
 #content {
   background: #fff;
-  padding: 20px;
+  padding: 16px;
   border-radius: 6px;
   line-height: 1.6;
+  max-width: 100% !important;
+  width: 100% !important;
 }
 
-body.dark #content {
+/* Dark mode for #content only when NOT using source CSS */
+body.dark #content:not(.using-source-css) {
   background: #1f2937;
   color: #f3f4f6;
 }
@@ -270,6 +329,47 @@ body.dark #content {
   border-bottom: 1px solid #dee2e6;
 }
 
+/* Wikipedia infobox styling */
+#content .infobox {
+  display: table !important;
+  float: right;
+  clear: right;
+  margin: 0 0 1em 1em;
+  padding: 0.2em;
+  border: 1px solid #a2a9b1;
+  background-color: #f8f9fa;
+  color: #202122;
+  font-size: 88%;
+  line-height: 1.5em;
+  width: 22em;
+  border-spacing: 3px;
+  border-collapse: separate;
+}
+
+body.dark #content:not(.using-source-css) .infobox {
+  background-color: #1f2937;
+  color: #f3f4f6;
+  border-color: #374151;
+}
+
+#content .infobox th,
+#content .infobox td {
+  vertical-align: top;
+  padding: 0.2em;
+}
+
+#content .infobox th {
+  text-align: left;
+  font-weight: 600;
+}
+
+#content .infobox caption {
+  font-size: 125%;
+  font-weight: bold;
+  padding: 0.2em;
+  text-align: center;
+}
+
 #loading {
   color: #4b5563;
   margin: 10px 0;
@@ -281,18 +381,50 @@ body.dark #loading {
 }
 
 .htmx-indicator {
-  display: none;
+  display: none !important;
 }
 
-.htmx-request.htmx-indicator,
-.htmx-request ~ .htmx-indicator {
-  display: block;
+.htmx-request .htmx-indicator,
+.htmx-request.htmx-indicator {
+  display: block !important;
+}
+
+/* Loading Spinner */
+.loading-spinner {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  border: 2px solid #e5e7eb;
+  border-top-color: #9ca3af;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  pointer-events: none;
+  z-index: 10;
+  /* Temporary: always show for testing */
+  display: block !important;
+}
+
+body.dark .loading-spinner {
+  border-color: #374151;
+  border-top-color: #6b7280;
+}
+
+@keyframes spin {
+  0% {
+    transform: translateY(-50%) rotate(0deg);
+  }
+  100% {
+    transform: translateY(-50%) rotate(360deg);
+  }
 }
 
 .links-container {
   background: #f9fafb;
-  padding: 15px;
-  margin-bottom: 20px;
+  padding: 12px;
+  margin-bottom: 12px;
   border-radius: 6px;
   max-height: 300px;
   overflow-y: auto;
@@ -434,12 +566,11 @@ body.dark .links-container pre {
 
 .user-info {
   display: flex;
-  justify-content: space-between;
+  gap: 12px;
   align-items: center;
-  padding: 10px;
+  padding: 6px 12px;
   background: #f3f4f6;
   border-radius: 6px;
-  margin-bottom: 20px;
 }
 
 body.dark .user-info {
@@ -480,8 +611,8 @@ body.dark .logout-button:hover {
 /* CSS Info Styles */
 .css-info-container {
   background: #f9fafb;
-  padding: 15px;
-  margin-bottom: 20px;
+  padding: 12px;
+  margin-bottom: 12px;
   border-radius: 6px;
   max-height: 500px;
   overflow-y: auto;
@@ -570,8 +701,8 @@ body.dark .css-preview {
 /* Image Info Styles */
 .image-info-container {
   background: #f9fafb;
-  padding: 15px;
-  margin-bottom: 20px;
+  padding: 12px;
+  margin-bottom: 12px;
   border-radius: 6px;
 }
 
@@ -661,8 +792,8 @@ body.dark .info-note p {
 /* Visibility Stats Styles */
 .visibility-info-container {
   background: #f9fafb;
-  padding: 15px;
-  margin-bottom: 20px;
+  padding: 12px;
+  margin-bottom: 12px;
   border-radius: 6px;
 }
 
@@ -803,9 +934,9 @@ body.dark .toggle-control:hover input[type="checkbox"]:checked {
 .metadata-panel {
   background: #f9fafb;
   border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  padding: 1rem;
-  margin: 1rem 0;
+  border-radius: 6px;
+  padding: 12px;
+  margin: 12px 0;
   display: none;
 }
 
@@ -858,4 +989,41 @@ body.dark .metadata-item .value {
 
 body.dark .metadata-excerpt .value {
   color: #d1d5db;
+}
+
+/* Footer */
+.app-footer {
+  text-align: center;
+  padding: 20px;
+  margin-top: 40px;
+  font-size: 13px;
+  color: #6b7280;
+  border-top: 1px solid #e5e7eb;
+}
+
+.app-footer a {
+  color: #6b7280;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.app-footer a:hover {
+  color: #3b82f6;
+}
+
+.app-footer span {
+  margin: 0 8px;
+}
+
+body.dark .app-footer {
+  color: #9ca3af;
+  border-top-color: #374151;
+}
+
+body.dark .app-footer a {
+  color: #9ca3af;
+}
+
+body.dark .app-footer a:hover {
+  color: #60a5fa;
 }

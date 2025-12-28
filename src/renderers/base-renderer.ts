@@ -44,8 +44,15 @@ export abstract class BaseRenderer implements IRenderer {
     // Generate metadata panel HTML
     const metadataPanel = this.generateMetadataPanel(metadata, processed.rendererName);
 
+    // Prepend title as h1 to content if available and not already present
+    let content = processed.html;
+    if (metadata.title && !processed.html.includes('<h1')) {
+      const titleHtml = `<h1 class="article-title">${this.escape(metadata.title)}</h1>`;
+      content = titleHtml + content;
+    }
+
     return {
-      content: processed.html,
+      content,
       metadata,
       metadataPanel,
     };
@@ -58,9 +65,7 @@ export abstract class BaseRenderer implements IRenderer {
   protected generateMetadataPanel(metadata: any, rendererName?: string): string {
     const items = [];
 
-    if (metadata.title) {
-      items.push(`<div class="metadata-item"><span class="label">Title:</span><span class="value">${this.escape(metadata.title)}</span></div>`);
-    }
+    // Don't show title in metadata panel - it's already shown as h1 in content
 
     if (metadata.description) {
       items.push(`<div class="metadata-item"><span class="label">Description:</span><span class="value">${this.escape(metadata.description)}</span></div>`);

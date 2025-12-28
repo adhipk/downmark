@@ -1,12 +1,8 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { createRoot } from "react-dom/client";
+import DOMPurify from "dompurify";
 import ChevronLeft from "lucide-react/dist/esm/icons/chevron-left";
 import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
-import Code2 from "lucide-react/dist/esm/icons/code-2";
-import Link from "lucide-react/dist/esm/icons/link";
-import Shield from "lucide-react/dist/esm/icons/shield";
-import Image from "lucide-react/dist/esm/icons/image";
-import Eye from "lucide-react/dist/esm/icons/eye";
 import "./styles.css";
 import "./content-styles.css";
 import { AuthUI } from "./auth-ui";
@@ -24,12 +20,11 @@ interface PageCache {
 }
 
 function ConverterApp({ username, onLogout }: { username: string | null; onLogout: () => void }) {
-  const [customStyling, setCustomStyling] = useState(true);
+  const [customStyling, setCustomStyling] = useState(true); // true = Downmark CSS, false = Source CSS
   const [darkTheme, setDarkTheme] = useState(false);
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [urlError, setUrlError] = useState<string>("");
-  const debounceTimerRef = useRef<number | null>(null);
 
   const getCache = (): PageCache[] => {
     try {
@@ -97,36 +92,48 @@ function ConverterApp({ username, onLogout }: { username: string | null; onLogou
   };
 
   const handleUrlChange = useCallback((url: string) => {
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
-    }
-
     if (!url.trim()) {
       setUrlError("");
       return;
     }
 
-    debounceTimerRef.current = window.setTimeout(() => {
-      const normalizedUrl = normalizeUrl(url);
-
-      if (!normalizedUrl) {
-        setUrlError("Please enter a valid URL (e.g., example.com or https://example.com)");
-        return;
-      }
-
+    const normalizedUrl = normalizeUrl(url);
+    if (!normalizedUrl) {
+      setUrlError("Please enter a valid URL (e.g., example.com or https://example.com)");
+    } else {
       setUrlError("");
-
-      if (window.htmx) {
-        const urlInput = document.getElementById('urlInput') as HTMLInputElement;
-        if (urlInput) {
-          window.htmx.ajax('GET', `/render?q=${encodeURIComponent(normalizedUrl)}`, {
-            target: '#content',
-            indicator: '#loading'
-          });
-        }
-      }
-    }, 500); // 500ms debounce
+    }
   }, []);
+
+  const handleSubmit = useCallback(() => {
+    const urlInput = document.getElementById('urlInput') as HTMLInputElement;
+    if (!urlInput) return;
+
+    const url = urlInput.value.trim();
+    if (!url) return;
+
+    const normalizedUrl = normalizeUrl(url);
+    if (!normalizedUrl) {
+      setUrlError("Please enter a valid URL (e.g., example.com or https://example.com)");
+      return;
+    }
+
+    setUrlError("");
+
+    if (window.htmx) {
+      window.htmx.ajax('GET', `/render?q=${encodeURIComponent(normalizedUrl)}`, {
+        target: '#content',
+        indicator: '#url-spinner'
+      });
+    }
+  }, []);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleSubmit();
+    }
+  }, [handleSubmit]);
 
   const handleAfterRequest = useCallback((event: any) => {
     // Get the URL from the input field
@@ -161,7 +168,7 @@ function ConverterApp({ username, onLogout }: { username: string | null; onLogou
     const cached = getCachedPage(url);
     if (cached) {
       const contentDiv = document.getElementById('content');
-      if (contentDiv) contentDiv.innerHTML = cached;
+      if (contentDiv) contentDiv.innerHTML = DOMPurify.sanitize(cached);
       const urlInput = document.getElementById('urlInput') as HTMLInputElement;
       if (urlInput) urlInput.value = url;
       setHistoryIndex(newIndex);
@@ -171,7 +178,7 @@ function ConverterApp({ username, onLogout }: { username: string | null; onLogou
         .then(res => res.text())
         .then(html => {
           const contentDiv = document.getElementById('content');
-          if (contentDiv) contentDiv.innerHTML = html;
+          if (contentDiv) contentDiv.innerHTML = DOMPurify.sanitize(html);
           setHistoryIndex(newIndex);
         });
     }
@@ -187,7 +194,7 @@ function ConverterApp({ username, onLogout }: { username: string | null; onLogou
     const cached = getCachedPage(url);
     if (cached) {
       const contentDiv = document.getElementById('content');
-      if (contentDiv) contentDiv.innerHTML = cached;
+      if (contentDiv) contentDiv.innerHTML = DOMPurify.sanitize(cached);
       const urlInput = document.getElementById('urlInput') as HTMLInputElement;
       if (urlInput) urlInput.value = url;
       setHistoryIndex(newIndex);
@@ -197,7 +204,7 @@ function ConverterApp({ username, onLogout }: { username: string | null; onLogou
         .then(res => res.text())
         .then(html => {
           const contentDiv = document.getElementById('content');
-          if (contentDiv) contentDiv.innerHTML = html;
+          if (contentDiv) contentDiv.innerHTML = DOMPurify.sanitize(html);
           setHistoryIndex(newIndex);
         });
     }
@@ -214,26 +221,38 @@ function ConverterApp({ username, onLogout }: { username: string | null; onLogou
 
     return () => {
       document.body.removeEventListener('htmx:afterRequest', handleAfterRequest);
-      // Cleanup debounce timer
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-      }
     };
   }, [handleAfterRequest]);
 
   useEffect(() => {
-    // Apply/remove custom styling class to content
+    // Handle CSS styling
+    // customStyling = true → Downmark CSS (can use dark mode)
+    // customStyling = false → Source CSS (no dark mode)
     const contentDiv = document.getElementById('content');
+    const sourceStyleElement = document.getElementById('source-styles') as HTMLStyleElement;
+
     if (contentDiv) {
       if (customStyling) {
+        // Use Downmark CSS
         contentDiv.classList.add('styled');
+        contentDiv.classList.remove('using-source-css');
+        if (sourceStyleElement) {
+          sourceStyleElement.disabled = true; // Disable source CSS
+        }
       } else {
+        // Use source CSS
         contentDiv.classList.remove('styled');
+        contentDiv.classList.add('using-source-css');
+        if (sourceStyleElement) {
+          sourceStyleElement.disabled = false; // Enable source CSS
+        }
       }
     }
 
-    // Apply/remove dark mode to entire document
-    if (darkTheme) {
+    // Apply/remove dark mode
+    // Dark mode only works with Downmark CSS
+    // UI chrome gets dark mode, content is excluded via CSS when using source CSS
+    if (darkTheme && customStyling) {
       document.documentElement.classList.add('dark');
       document.body.classList.add('dark');
     } else {
@@ -244,14 +263,18 @@ function ConverterApp({ username, onLogout }: { username: string | null; onLogou
 
   return (
     <>
-      {username && (
-        <div className="user-info">
-          <span>Signed in as <strong>{username}</strong></span>
-          <button onClick={onLogout} className="logout-button">
-            Logout
-          </button>
-        </div>
-      )}
+      <div className="header">
+        <h1 className="page-title">Downmark</h1>
+
+        {username && (
+          <div className="user-info">
+            <span>Signed in as <strong>{username}</strong></span>
+            <button onClick={onLogout} className="logout-button">
+              Logout
+            </button>
+          </div>
+        )}
+      </div>
 
       <div className="toolbar">
         <div className="nav-bar">
@@ -272,83 +295,35 @@ function ConverterApp({ username, onLogout }: { username: string | null; onLogou
             <ChevronRight size={18} />
           </button>
 
-          <div className="url-form">
-            <input
-              type="text"
-              name="q"
-              id="urlInput"
-              placeholder="Enter URL..."
-              defaultValue=""
-              onChange={(e) => handleUrlChange(e.target.value)}
-              className={urlError ? "error" : ""}
-            />
+          <div className="url-form-container">
+            <div className="url-form">
+              <div className="url-input-wrapper">
+                <input
+                  type="text"
+                  name="q"
+                  id="urlInput"
+                  placeholder="Enter URL..."
+                  defaultValue=""
+                  onChange={(e) => handleUrlChange(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  className={urlError ? "error" : ""}
+                />
+                <div className="loading-spinner htmx-indicator" id="url-spinner"></div>
+              </div>
+              <button
+                type="button"
+                onClick={handleSubmit}
+                className="submit-btn"
+                title="Convert (Enter)"
+              >
+                Go
+              </button>
+            </div>
             {urlError && <span className="url-error">{urlError}</span>}
           </div>
         </div>
 
         <div className="controls-bar">
-          <div className="action-buttons">
-            <button
-              type="button"
-              hx-get="/original"
-              hx-target="#content"
-              hx-include="[name='q']"
-              hx-indicator="#loading"
-              className="tool-btn"
-              title="Original HTML"
-            >
-              <Code2 size={16} />
-            </button>
-            <button
-              type="button"
-              hx-get="/links?format=text"
-              hx-target="#links-list"
-              hx-include="[name='q']"
-              hx-indicator="#loading"
-              hx-swap="innerHTML"
-              className="tool-btn"
-              title="Links"
-            >
-              <Link size={16} />
-            </button>
-            <button
-              type="button"
-              hx-get="/css?format=json"
-              hx-target="#css-info"
-              hx-include="[name='q']"
-              hx-indicator="#loading"
-              hx-swap="innerHTML"
-              className="tool-btn"
-              title="CSS"
-            >
-              <Shield size={16} />
-            </button>
-            <button
-              type="button"
-              hx-get="/images"
-              hx-target="#image-info"
-              hx-include="[name='q']"
-              hx-indicator="#loading"
-              hx-swap="innerHTML"
-              className="tool-btn"
-              title="Images"
-            >
-              <Image size={16} />
-            </button>
-            <button
-              type="button"
-              hx-get="/visibility"
-              hx-target="#visibility-info"
-              hx-include="[name='q']"
-              hx-indicator="#loading"
-              hx-swap="innerHTML"
-              className="tool-btn"
-              title="Visibility"
-            >
-              <Eye size={16} />
-            </button>
-          </div>
-
           <div className="view-controls">
             <label className="toggle-control">
               <input
@@ -372,13 +347,18 @@ function ConverterApp({ username, onLogout }: { username: string | null; onLogou
         </div>
       </div>
 
-      <div id="loading" className="htmx-indicator">Loading...</div>
-      <div id="links-list" className="links-container"></div>
-      <div id="css-info" className="css-info-container"></div>
-      <div id="image-info" className="image-info-container"></div>
-      <div id="visibility-info" className="visibility-info-container"></div>
       <div id="metadata-panel" className="metadata-panel"></div>
       <main id="content"></main>
+
+      <footer className="app-footer">
+        <a href="https://github.com/adhipk/downmark" target="_blank" rel="noopener noreferrer">
+          Source Code
+        </a>
+        <span>·</span>
+        <a href="https://github.com/adhipk" target="_blank" rel="noopener noreferrer">
+          @adhipk
+        </a>
+      </footer>
     </>
   );
 }

@@ -156,6 +156,24 @@ export async function getPageData(url: string, options: { collectCssClasses?: bo
     images.forEach((img: HTMLImageElement) => {
       const hadDimensions = img.hasAttribute('width') || img.hasAttribute('height');
 
+      // Remove wrapper divs with padding-bottom hacks
+      let parent = img.parentElement;
+      while (parent && parent.tagName !== 'BODY') {
+        const parentStyle = parent.getAttribute('style');
+        if (parentStyle && parentStyle.includes('padding-bottom')) {
+          parent.removeAttribute('style');
+        }
+        // Also remove common wrapper classes that cause layout issues
+        if (parent.className && (
+          parent.className.includes('primary-image') ||
+          parent.className.includes('image-container') ||
+          parent.className.includes('img-wrapper')
+        )) {
+          parent.removeAttribute('style');
+        }
+        parent = parent.parentElement;
+      }
+
       // Capture original display type from computed styles
       const computed = window.getComputedStyle(img);
       if (computed.display && !img.hasAttribute('data-original-display')) {
@@ -176,10 +194,23 @@ export async function getPageData(url: string, options: { collectCssClasses?: bo
         imagesWithDimensions++;
       }
 
-      // Add loading="lazy" for better performance if not specified
-      if (!img.hasAttribute('loading')) {
-        img.setAttribute('loading', 'lazy');
+      // Remove lazy loading since we don't run JS on client
+      if (img.hasAttribute('loading')) {
+        img.removeAttribute('loading');
       }
+
+      // Remove onload handlers since we don't run JS on client
+      if (img.hasAttribute('onload')) {
+        img.removeAttribute('onload');
+      }
+
+      // Remove style attributes that break layout (padding-bottom hacks, etc.)
+      if (img.hasAttribute('style')) {
+        img.removeAttribute('style');
+      }
+
+      // Set eager loading explicitly
+      img.setAttribute('loading', 'eager');
 
       // Add alt text if missing (for accessibility)
       if (!img.hasAttribute('alt')) {
@@ -233,6 +264,28 @@ export async function getPageData(url: string, options: { collectCssClasses?: bo
     const inlineStyles: string[] = [];
     let blockedStylesheets = 0;
 
+    // Helper function to convert relative URLs in CSS to absolute
+    const makeUrlsAbsolute = (cssText: string): string => {
+      const baseUrl = window.location.origin;
+      const currentPath = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
+
+      // Match url(...) in CSS
+      return cssText.replace(/url\(['"]?([^'")]+)['"]?\)/g, (match, url) => {
+        // Skip data URIs and already absolute URLs
+        if (url.startsWith('data:') || url.startsWith('http://') || url.startsWith('https://') || url.startsWith('//')) {
+          return match;
+        }
+
+        // Convert to absolute URL
+        try {
+          const absoluteUrl = new URL(url, baseUrl + currentPath).href;
+          return `url("${absoluteUrl}")`;
+        } catch {
+          return match;
+        }
+      });
+    };
+
     // Extract from all stylesheets (external and inline)
     const styleSheets = Array.from(document.styleSheets);
     styleSheets.forEach((sheet) => {
@@ -243,7 +296,8 @@ export async function getPageData(url: string, options: { collectCssClasses?: bo
             .map(rule => rule.cssText)
             .join('\n');
           if (cssText) {
-            allCSS.push(cssText);
+            // Convert relative URLs to absolute
+            allCSS.push(makeUrlsAbsolute(cssText));
           }
         }
       } catch (e) {
@@ -281,7 +335,8 @@ export async function getPageData(url: string, options: { collectCssClasses?: bo
       // Deduplicate and merge styles
       const uniqueStyles = Array.from(new Set(styles));
       uniqueStyles.forEach(style => {
-        inlineStyles.push(`${selector} { ${style} }`);
+        // Convert relative URLs in inline styles too
+        inlineStyles.push(`${selector} { ${makeUrlsAbsolute(style)} }`);
       });
     });
 

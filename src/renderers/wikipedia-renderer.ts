@@ -19,9 +19,9 @@ export class WikipediaRenderer extends BaseRenderer {
     "*.wikipedia.org",
     "wikipedia.org",
   ];
-  readonly priority = 10; // Higher priority
+  override readonly priority = 10; // Higher priority
 
-  async process(pageData: PageData, sourceUrl: string): Promise<ProcessedContent> {
+  override async process(pageData: PageData, sourceUrl: string): Promise<ProcessedContent> {
     const { document } = parseHTML(pageData.html);
 
     // Wikipedia-specific selectors
@@ -84,8 +84,11 @@ export class WikipediaRenderer extends BaseRenderer {
 
     // Extract article title from Wikipedia's h1
     const wikiTitle = document.querySelector("#firstHeading");
+    let titleHtml = "";
     if (wikiTitle) {
-      pageData.metadata.title = wikiTitle.textContent || pageData.metadata.title;
+      const titleText = (wikiTitle.textContent || pageData.metadata.title || "") as string;
+      pageData.metadata.title = titleText ?? "";
+      titleHtml = `<h1 class="article-title">${this.escape(titleText)}</h1>`;
     }
 
     // Get first paragraph as excerpt (skip empty paragraphs)
@@ -98,7 +101,7 @@ export class WikipediaRenderer extends BaseRenderer {
       }
     }
 
-    let cleanHtml = content.innerHTML;
+    let cleanHtml = titleHtml + content.innerHTML;
 
     // Apply standard transformations
     cleanHtml = transformImagesToAbsolute(cleanHtml, sourceUrl);
@@ -120,7 +123,7 @@ export class WikipediaRenderer extends BaseRenderer {
     };
   }
 
-  protected generateMetadataPanel(metadata: any, rendererName?: string): string {
+  protected override generateMetadataPanel(metadata: any, rendererName?: string): string {
     let panel = super.generateMetadataPanel(metadata, rendererName);
 
     // Add Wikipedia-specific metadata - excerpt

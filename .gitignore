@@ -1,34 +1,53 @@
-# dependencies (bun install)
-node_modules
+# -------------------------
+# Binaries / executables
+# -------------------------
+downmark
+/bin/
+*.exe
 
-# output
-out
-dist
+# -------------------------
+# Dependencies
+# -------------------------
+node_modules/
+
+# -------------------------
+# Build / output
+# -------------------------
+out/
+dist/
+build/
+.coverage/
+output.md
 *.tgz
 
-# code coverage
-coverage
-*.lcov
+# -------------------------
+# Logs
+# -------------------------
+logs/
+*.log
+report.*.json
 
-# logs
-logs
-_.log
-report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
-
-# dotenv environment variable files
+# -------------------------
+# Env files
+# -------------------------
 .env
-.env.development.local
-.env.test.local
-.env.production.local
-.env.local
+.env.*
+!.env.example
 
-# caches
+# -------------------------
+# Caches
+# -------------------------
+.cache/
 .eslintcache
-.cache
 *.tsbuildinfo
 
-# IntelliJ based IDEs
-.idea
-
-# Finder (MacOS) folder config
+# -------------------------
+# IDE / OS
+# -------------------------
+.idea/
 .DS_Store
+
+# -------------------------
+# Fly.io
+# -------------------------
+.fly/

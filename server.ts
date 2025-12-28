@@ -230,6 +230,44 @@ const server = Bun.serve({
             responseHtml = response.metadataPanel + "\n" + responseHtml;
           }
 
+          // Inject source CSS to preserve original layouts (scoped to #content only)
+          if (pageData.cssInfo && pageData.cssInfo.extractedCSS) {
+            // Scope all CSS to #content to prevent it from affecting page chrome
+            const scopedCSS = pageData.cssInfo.extractedCSS
+              .split('\n')
+              .map(line => {
+                // Skip empty lines and comments
+                if (!line.trim() || line.trim().startsWith('/*')) return line;
+
+                // If line contains a selector (ends with { or has rules), scope it
+                if (line.includes('{') && !line.trim().startsWith('@')) {
+                  // Extract selector and rules
+                  const parts = line.split('{');
+                  if (parts.length >= 2) {
+                    const selector = parts[0].trim();
+                    const rules = parts.slice(1).join('{');
+
+                    // Don't scope if already scoped to #content or is a :root, html, body selector
+                    if (selector.includes('#content') || selector.match(/^(html|body|:root)\s*$/)) {
+                      return line;
+                    }
+
+                    // Scope the selector
+                    return `#content ${selector} { ${rules}`;
+                  }
+                }
+                return line;
+              })
+              .join('\n');
+
+            const sourceCSS = `
+              <style id="source-styles">
+                ${scopedCSS}
+              </style>
+            `;
+            responseHtml = sourceCSS + "\n" + responseHtml;
+          }
+
           // Add out-of-band swap to update the URL input field
           responseHtml += `
             <input type="text" name="q" id="urlInput" value="${targetUrl.replace(/"/g, '&quot;')}"
