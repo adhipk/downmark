@@ -18,8 +18,27 @@ Convert any webpage to clean, readable Markdown using Chrome headless and Mozill
 
 ### Installation
 
+**Automated Installation (Recommended)**
+
+Run the install script to automatically set up everything:
+
+```bash
+chmod +x install.sh
+./install.sh
+```
+
+This will:
+- Install Bun (if not already installed)
+- Install Pandoc (if available via package manager)
+- Install project dependencies
+- Set up your .env configuration file
+- Optionally build the standalone binary
+
+**Manual Installation**
+
 ```bash
 bun install
+cp .env.example .env  # Configure your settings
 ```
 
 ### CLI Usage
