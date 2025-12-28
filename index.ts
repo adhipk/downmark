@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { getUrl } from "./src/cli.ts";
-import { getPageData } from "./src/browser.ts";
+import { getPageData, closeBrowser } from "./src/browser.ts";
 import { extractContent, removeBoilerplate } from "./src/extractor.ts";
 import { htmlToMarkdown, generateFrontmatter } from "./src/markdown.ts";
 
@@ -31,3 +31,6 @@ const frontmatter = generateFrontmatter(metadata, cssClasses, url);
 console.log(frontmatter);
 console.log("");
 console.log(markdown);
+
+// Graceful cleanup
+await closeBrowser();

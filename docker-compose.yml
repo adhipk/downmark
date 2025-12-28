@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  downmark:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - HOST=0.0.0.0
+      - NODE_ENV=production
+    restart: unless-stopped
+    # Increase shared memory size for Chrome
+    shm_size: '2gb'
+    # Optional: Add resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G

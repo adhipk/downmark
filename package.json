@@ -1,26 +1,42 @@
 {
-  "name": "html-to-markdown-chrome-headless",
+  "name": "downmark",
+  "version": "1.0.0",
+  "description": "Convert any webpage to clean Markdown using Chrome headless and Readability",
   "module": "index.ts",
   "type": "module",
-  "private": true,
+  "private": false,
   "bin": {
-    "html2md": "index.ts"
+    "downmark": "index.ts"
   },
   "scripts": {
-    "fetch": "bun run index.ts",
-    "serve": "bun run server.ts"
+    "cli": "bun run index.ts",
+    "dev": "bun --hot server.ts",
+    "start": "NODE_ENV=production bun run server.ts",
+    "build": "NODE_ENV=production bun build ./server.ts --compile --outfile downmark",
+    "docker:build": "docker build -t downmark .",
+    "docker:run": "docker run -p 3000:3000 downmark",
+    "docker:up": "docker-compose up",
+    "docker:down": "docker-compose down"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "autoprefixer": "^10.4.23",
+    "tailwindcss": "^4.1.18"
   },
   "peerDependencies": {
     "typescript": "^5"
   },
   "dependencies": {
     "@mozilla/readability": "^0.6.0",
+    "@simplewebauthn/browser": "^13.2.2",
+    "@simplewebauthn/server": "^13.2.2",
     "linkedom": "^0.18.12",
+    "lucide-react": "^0.562.0",
+    "marked": "^17.0.1",
     "puppeteer": "^24.34.0",
-    "puppeteer-extra": "^3.3.6",
-    "puppeteer-extra-plugin-stealth": "^2.11.2"
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3"
   }
 }

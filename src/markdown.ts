@@ -5,7 +5,8 @@
 import { $ } from "bun";
 
 export async function htmlToMarkdown(html: string): Promise<string> {
-  const result = await $`echo ${html} | pandoc -f html -t gfm`.text();
+  const format = process.env.PANDOC_OUTPUT_FORMAT || "gfm";
+  const result = await $`echo ${html} | pandoc -f html -t ${format}`.text();
   return result;
 }
 
