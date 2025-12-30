@@ -42,4 +42,4 @@ ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
 EXPOSE 3000
 
 # Run the server
-CMD ["bun", "run", "server.ts"]
+CMD ["bun", "run", "server.tsx"]

@@ -3,8 +3,6 @@ import { createRoot } from "react-dom/client";
 import DOMPurify from "dompurify";
 import ChevronLeft from "lucide-react/dist/esm/icons/chevron-left";
 import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
-import "./styles.css";
-import "./content-styles.css";
 import { AuthUI } from "./auth-ui";
 
 declare global {
@@ -120,12 +118,8 @@ function ConverterApp({ username, onLogout }: { username: string | null; onLogou
 
     setUrlError("");
 
-    if (window.htmx) {
-      window.htmx.ajax('GET', `/render?q=${encodeURIComponent(normalizedUrl)}`, {
-        target: '#content',
-        indicator: '#url-spinner'
-      });
-    }
+    // Navigate to the URL using the new shareable format (URL-encoded)
+    window.location.href = `/${encodeURIComponent(normalizedUrl)}`;
   }, []);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -164,24 +158,8 @@ function ConverterApp({ username, onLogout }: { username: string | null; onLogou
     const newIndex = historyIndex - 1;
     const url = history[newIndex];
 
-    // Try to load from cache
-    const cached = getCachedPage(url);
-    if (cached) {
-      const contentDiv = document.getElementById('content');
-      if (contentDiv) contentDiv.innerHTML = DOMPurify.sanitize(cached);
-      const urlInput = document.getElementById('urlInput') as HTMLInputElement;
-      if (urlInput) urlInput.value = url;
-      setHistoryIndex(newIndex);
-    } else {
-      // Re-fetch if not cached
-      fetch(`/render?q=${encodeURIComponent(url)}`)
-        .then(res => res.text())
-        .then(html => {
-          const contentDiv = document.getElementById('content');
-          if (contentDiv) contentDiv.innerHTML = DOMPurify.sanitize(html);
-          setHistoryIndex(newIndex);
-        });
-    }
+    // Navigate using the new URL format (URL-encoded)
+    window.location.href = `/${encodeURIComponent(url)}`;
   }, [historyIndex, history]);
 
   const goForward = useCallback(() => {
@@ -190,24 +168,8 @@ function ConverterApp({ username, onLogout }: { username: string | null; onLogou
     const newIndex = historyIndex + 1;
     const url = history[newIndex];
 
-    // Try to load from cache
-    const cached = getCachedPage(url);
-    if (cached) {
-      const contentDiv = document.getElementById('content');
-      if (contentDiv) contentDiv.innerHTML = DOMPurify.sanitize(cached);
-      const urlInput = document.getElementById('urlInput') as HTMLInputElement;
-      if (urlInput) urlInput.value = url;
-      setHistoryIndex(newIndex);
-    } else {
-      // Re-fetch if not cached
-      fetch(`/render?q=${encodeURIComponent(url)}`)
-        .then(res => res.text())
-        .then(html => {
-          const contentDiv = document.getElementById('content');
-          if (contentDiv) contentDiv.innerHTML = DOMPurify.sanitize(html);
-          setHistoryIndex(newIndex);
-        });
-    }
+    // Navigate using the new URL format (URL-encoded)
+    window.location.href = `/${encodeURIComponent(url)}`;
   }, [historyIndex, history]);
 
   useEffect(() => {
@@ -219,10 +181,94 @@ function ConverterApp({ username, onLogout }: { username: string | null; onLogou
     // Set up htmx event listeners for history management
     document.body.addEventListener('htmx:afterRequest', handleAfterRequest);
 
+    // Handle link clicks in content area
+    const handleContentClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      const link = target.closest('a');
+
+      if (!link) return;
+
+      const href = link.getAttribute('href');
+      if (!href || href.startsWith('#') || href.startsWith('javascript:')) return;
+
+      // Cmd+Shift+Click: Open actual link in new tab
+      if (e.metaKey && e.shiftKey) {
+        e.preventDefault();
+        window.open(href, '_blank');
+        return;
+      }
+
+      // Regular click: Navigate to localhost/url
+      if (!link.hasAttribute('hx-get') && !link.hasAttribute('hx-post')) {
+        e.preventDefault();
+
+        // Make URL absolute if it's relative
+        let absoluteUrl = href;
+        try {
+          if (!href.match(/^https?:\/\//)) {
+            const currentUrl = (window as any).__INITIAL_URL__;
+            if (currentUrl) {
+              absoluteUrl = new URL(href, currentUrl).href;
+            }
+          }
+
+          // Navigate to localhost/url format
+          window.location.href = `/${encodeURIComponent(absoluteUrl)}`;
+        } catch (err) {
+          console.error('Error processing link:', err);
+        }
+      }
+    };
+
+    document.body.addEventListener('click', handleContentClick);
+
+    // Check for initial URL and content from server
+    const initialUrl = (window as any).__INITIAL_URL__;
+    const initialContent = (window as any).__INITIAL_CONTENT__;
+    const initialError = (window as any).__INITIAL_ERROR__;
+
+    if (initialUrl && initialContent) {
+      // Pre-populate the URL input
+      const urlInput = document.getElementById('urlInput') as HTMLInputElement;
+      if (urlInput) {
+        urlInput.value = initialUrl;
+      }
+
+      // Pre-populate the content div
+      const contentDiv = document.getElementById('content');
+      if (contentDiv) {
+        contentDiv.innerHTML = DOMPurify.sanitize(initialContent);
+      }
+
+      // Add to history
+      setHistory([initialUrl]);
+      setHistoryIndex(0);
+      cachePage(initialUrl, initialContent);
+    } else if (initialError) {
+      // Show error
+      const urlInput = document.getElementById('urlInput') as HTMLInputElement;
+      if (urlInput) {
+        urlInput.value = initialError.url;
+      }
+
+      const contentDiv = document.getElementById('content');
+      if (contentDiv) {
+        contentDiv.innerHTML = `
+          <div style="padding: 20px; background: #fee; border: 2px solid #c00; border-radius: 8px; color: #c00;">
+            <h3 style="margin-top: 0;">Error Loading Page</h3>
+            <p><strong>URL:</strong> ${initialError.url}</p>
+            <p><strong>Error:</strong> ${initialError.message}</p>
+            <p style="font-size: 0.9em; color: #666;">This could be due to timeout, network issues, or the site blocking automated access.</p>
+          </div>
+        `;
+      }
+    }
+
     return () => {
       document.body.removeEventListener('htmx:afterRequest', handleAfterRequest);
+      document.body.removeEventListener('click', handleContentClick);
     };
-  }, [handleAfterRequest]);
+  }, [handleAfterRequest, cachePage]);
 
   useEffect(() => {
     // Handle CSS styling

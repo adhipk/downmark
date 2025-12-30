@@ -10,9 +10,12 @@
   font-size: 16px;
   line-height: 1.7;
   color: #2c3e50;
-  max-width: 900px;
-  margin: 0 auto;
+  margin: 0 16px;
   padding: 20px 16px;
+  /* Prevent text overflow */
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  hyphens: auto;
 }
 
 /* Headings */
@@ -27,6 +30,9 @@
   font-weight: 700;
   line-height: 1.3;
   color: #1a202c;
+  /* Wrap long headings */
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 #content.styled h1 {
@@ -72,6 +78,9 @@
   text-decoration: none;
   border-bottom: 1px solid transparent;
   transition: all 0.2s ease;
+  /* Wrap long URLs */
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 #content.styled a:hover {
@@ -341,4 +350,21 @@ body.dark #content.styled tbody tr:nth-child(even):hover {
 
 body.dark #content.styled hr {
   border-top-color: #4b5563;
+}
+
+/* Universal text overflow prevention */
+#content.styled * {
+  /* Prevent any element from overflowing */
+  max-width: 100%;
+  /* Wrap long words in all text elements */
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+/* Specific handling for code elements - don't break words, just scroll */
+#content.styled code,
+#content.styled pre {
+  word-wrap: normal;
+  overflow-wrap: normal;
+  word-break: normal;
 }

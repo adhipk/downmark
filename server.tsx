@@ -2,9 +2,10 @@ import { getPageData, closeBrowser } from "./src/browser.ts";
 import { extractContent, removeBoilerplate, transformLinksToHtmx, extractAllLinks, transformImagesToAbsolute } from "./src/extractor.ts";
 import { htmlToMarkdown } from "./src/markdown.ts";
 import { marked } from "marked";
-import indexFile from "./index.html";
 import * as auth from "./src/auth.ts";
 import { rendererRegistry } from "./src/renderer-registry.ts";
+import { renderToString } from "react-dom/server";
+import { PageTemplate } from "./src/page-template.tsx";
 
 // Graceful shutdown
 process.on("SIGINT", async () => {
@@ -25,6 +26,20 @@ const jsonResponse = (data: any, status = 200) => {
     headers: { "Content-Type": "application/json" },
   });
 };
+
+// Helper to render the index.html with optional initial state
+function renderIndexWithState(state?: { url?: string; content?: string; error?: { url: string; message: string } }) {
+  const html = renderToString(
+    <PageTemplate
+      url={state?.url}
+      content={state?.content}
+      error={state?.error}
+    />
+  );
+
+  // Add DOCTYPE declaration (renderToString doesn't include it)
+  return '<!DOCTYPE html>' + html;
+}
 
 // Auth helpers
 function getSessionFromRequest(req: Request): string | undefined {
@@ -212,8 +227,12 @@ const server = Bun.serve({
         }
 
         try {
-          // Stage 1: Fetch page data
-          const pageData = await getPageData(targetUrl);
+          // Stage 1: Fetch page data (skip expensive operations for speed)
+          const pageData = await getPageData(targetUrl, {
+            extractVisibility: false,  // Skip - not needed for rendering
+            extractImages: false,       // Skip - not needed for rendering
+            extractCss: false,          // Skip - not needed for rendering
+          });
 
           // Stage 2: Select and execute renderer
           const renderer = rendererRegistry.selectRenderer(targetUrl);
@@ -232,6 +251,24 @@ const server = Bun.serve({
 
           // Inject source CSS to preserve original layouts (scoped to #content only)
           if (pageData.cssInfo && pageData.cssInfo.extractedCSS) {
+            // Helper function to scope a selector
+            const scopeSelector = (selector: string): string => {
+              const trimmed = selector.trim();
+
+              // Already scoped to #content
+              if (trimmed.includes('#content')) {
+                return selector;
+              }
+
+              // Convert global selectors (html, body, :root) to #content
+              if (trimmed.match(/^(html|body|:root)(\s|$|,)/)) {
+                return trimmed.replace(/^(html|body|:root)(\s|$|,)/, '#content$2');
+              }
+
+              // Scope regular selectors
+              return `#content ${selector}`;
+            };
+
             // Scope all CSS to #content to prevent it from affecting page chrome
             const scopedCSS = pageData.cssInfo.extractedCSS
               .split('\n')
@@ -239,21 +276,26 @@ const server = Bun.serve({
                 // Skip empty lines and comments
                 if (!line.trim() || line.trim().startsWith('/*')) return line;
 
+                // Handle @media, @supports, etc. - keep them but scope their contents
+                if (line.trim().startsWith('@media') || line.trim().startsWith('@supports')) {
+                  return line; // Return as-is, will scope the rules inside
+                }
+
                 // If line contains a selector (ends with { or has rules), scope it
                 if (line.includes('{') && !line.trim().startsWith('@')) {
                   // Extract selector and rules
                   const parts = line.split('{');
                   if (parts.length >= 2) {
-                    const selector = parts[0].trim();
+                    const selector = parts[0];
                     const rules = parts.slice(1).join('{');
 
-                    // Don't scope if already scoped to #content or is a :root, html, body selector
-                    if (selector.includes('#content') || selector.match(/^(html|body|:root)\s*$/)) {
-                      return line;
-                    }
+                    // Handle multiple selectors separated by commas
+                    const scopedSelectors = selector
+                      .split(',')
+                      .map(s => scopeSelector(s))
+                      .join(', ');
 
-                    // Scope the selector
-                    return `#content ${selector} { ${rules}`;
+                    return `${scopedSelectors} { ${rules}`;
                   }
                 }
                 return line;
@@ -402,8 +444,8 @@ const server = Bun.serve({
         }
 
         try {
-          // Fetch page data with CSS info
-          const pageData = await getPageData(targetUrl);
+          // Fetch page data with CSS info only
+          const pageData = await getPageData(targetUrl, { extractCss: true });
 
           if (!pageData.cssInfo) {
             return jsonResponse({ error: "CSS information not available" }, 500);
@@ -461,8 +503,8 @@ const server = Bun.serve({
         }
 
         try {
-          // Fetch page data with image info
-          const pageData = await getPageData(targetUrl);
+          // Fetch page data with image info only
+          const pageData = await getPageData(targetUrl, { extractImages: true });
 
           if (!pageData.imageInfo) {
             return jsonResponse({ error: "Image information not available" }, 500);
@@ -532,8 +574,8 @@ const server = Bun.serve({
         }
 
         try {
-          // Fetch page data with visibility info
-          const pageData = await getPageData(targetUrl);
+          // Fetch page data with visibility info only
+          const pageData = await getPageData(targetUrl, { extractVisibility: true });
 
           if (!pageData.visibilityInfo) {
             return jsonResponse({ error: "Visibility information not available" }, 500);
@@ -633,7 +675,6 @@ const server = Bun.serve({
               <style>
                 body {
                   font-family: system-ui, -apple-system, sans-serif;
-                  max-width: 900px;
                   margin: 40px auto;
                   padding: 20px;
                   line-height: 1.6;
@@ -697,7 +738,187 @@ const server = Bun.serve({
   },
 
   // fallback for anything not matched in routes
-  fetch() {
+  async fetch(req) {
+    const url = new URL(req.url);
+    const pathname = url.pathname;
+
+    // Handle static file requests - let Bun transpile TypeScript/JSX
+    if (pathname.startsWith('/src/')) {
+      try {
+        const filePath = import.meta.dir + pathname;
+
+        // For TypeScript/TSX files, use Bun.build to transpile
+        if (pathname.endsWith('.tsx') || pathname.endsWith('.ts')) {
+          const result = await Bun.build({
+            entrypoints: [filePath],
+            target: 'browser',
+            format: 'esm',
+            minify: false,
+            splitting: false, // Disable code splitting for single entry point
+            sourcemap: 'none',
+          });
+
+          if (result.outputs.length > 0) {
+            // Bun.build outputs an array - first is the JS, others may be CSS
+            const jsOutput = result.outputs.find(o => o.kind === 'entry-point');
+            const cssOutputs = result.outputs.filter(o => o.kind === 'asset' && o.path.endsWith('.css'));
+
+            if (jsOutput) {
+              let jsContent = await jsOutput.text();
+
+              // If there are CSS outputs, inject them into the JS as style tags
+              if (cssOutputs.length > 0) {
+                const cssInjection = cssOutputs.map(async (cssOut) => {
+                  const cssContent = await cssOut.text();
+                  return `const style_${cssOut.hash} = document.createElement('style');
+style_${cssOut.hash}.textContent = ${JSON.stringify(cssContent)};
+document.head.appendChild(style_${cssOut.hash});`;
+                });
+
+                const injections = await Promise.all(cssInjection);
+                jsContent = injections.join('\n') + '\n' + jsContent;
+              }
+
+              return new Response(jsContent, {
+                headers: { 'Content-Type': 'application/javascript' },
+              });
+            }
+          }
+        }
+
+        // For other files (CSS, JS), serve directly
+        const file = Bun.file(filePath);
+        let contentType = 'text/plain';
+        if (pathname.endsWith('.css')) {
+          contentType = 'text/css';
+        } else if (pathname.endsWith('.js')) {
+          contentType = 'application/javascript';
+        }
+
+        return new Response(file, {
+          headers: { 'Content-Type': contentType },
+        });
+      } catch (e) {
+        console.error('Error serving static file:', e);
+        return new Response('Not Found', { status: 404 });
+      }
+    }
+
+    // Handle URL-as-path routing: /https%3A%2F%2Fexample.com (URL-encoded)
+    // Decode the pathname to handle URL-encoded URLs
+    const decodedPathname = decodeURIComponent(pathname);
+
+    // Check if pathname starts with /http:// or /https://
+    const urlMatch = decodedPathname.match(/^\/(https?:\/\/.+)$/);
+
+    if (urlMatch) {
+      const targetUrl = urlMatch[1];
+
+      // Check auth if enabled
+      if (AUTH_ENABLED) {
+        const authError = requireAuth(req);
+        if (authError) return authError;
+      }
+
+      try {
+        // Stage 1: Fetch page data (skip expensive operations for speed)
+        const pageData = await getPageData(targetUrl, {
+          extractVisibility: false,
+          extractImages: false,
+          extractCss: false,
+        });
+
+        // Stage 2: Select and execute renderer
+        const renderer = rendererRegistry.selectRenderer(targetUrl);
+        console.log(`[Render] Using renderer: ${renderer.name} for ${targetUrl}`);
+
+        const processed = await renderer.process(pageData, targetUrl);
+        const response = await renderer.format(processed, targetUrl);
+
+        // Stage 3: Build final response
+        let responseHtml = response.content;
+
+        // Add metadata panel if available
+        if (response.metadataPanel) {
+          responseHtml = response.metadataPanel + "\n" + responseHtml;
+        }
+
+        // Inject source CSS to preserve original layouts (scoped to #content only)
+        if (pageData.cssInfo && pageData.cssInfo.extractedCSS) {
+          const scopeSelector = (selector: string): string => {
+            const trimmed = selector.trim();
+
+            if (trimmed.includes('#content')) {
+              return selector;
+            }
+
+            if (trimmed.match(/^(html|body|:root)(\s|$|,)/)) {
+              return trimmed.replace(/^(html|body|:root)(\s|$|,)/, '#content$2');
+            }
+
+            return `#content ${selector}`;
+          };
+
+          const scopedCSS = pageData.cssInfo.extractedCSS
+            .split('\n')
+            .map(line => {
+              if (!line.trim() || line.trim().startsWith('/*')) return line;
+
+              if (line.trim().startsWith('@media') || line.trim().startsWith('@supports')) {
+                return line;
+              }
+
+              if (line.includes('{') && !line.trim().startsWith('@')) {
+                const parts = line.split('{');
+                if (parts.length >= 2) {
+                  const selector = parts[0];
+                  const rules = parts.slice(1).join('{');
+
+                  const scopedSelectors = selector
+                    .split(',')
+                    .map(s => scopeSelector(s))
+                    .join(', ');
+
+                  return `${scopedSelectors} { ${rules}`;
+                }
+              }
+              return line;
+            })
+            .join('\n');
+
+          const sourceCSS = `
+            <style id="source-styles">
+              ${scopedCSS}
+            </style>
+          `;
+          responseHtml = sourceCSS + "\n" + responseHtml;
+        }
+
+        // Build full HTML page with the app UI
+        const fullPage = await renderIndexWithState({
+          url: targetUrl,
+          content: responseHtml,
+        });
+
+        return new Response(fullPage, {
+          headers: { "Content-Type": "text/html" },
+        });
+      } catch (error: any) {
+        console.error(`Error rendering ${targetUrl}:`, error);
+        const errorPage = await renderIndexWithState({
+          error: {
+            url: targetUrl,
+            message: error.message,
+          },
+        });
+
+        return new Response(errorPage, {
+          status: 200,
+          headers: { "Content-Type": "text/html" },
+        });
+      }
+    }
+
     return new Response("Not Found", { status: 404 });
   },
 });

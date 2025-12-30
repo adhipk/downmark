@@ -1,10 +1,26 @@
+html {
+  box-sizing: border-box;
+  /* Prevent horizontal overflow on the entire page */
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+*, *::before, *::after {
+  box-sizing: inherit;
+  /* Prevent any element from causing horizontal overflow */
+  min-width: 0;
+}
+
 body {
   font-family: system-ui, -apple-system, sans-serif;
-  max-width: 1200px;
+  max-width: min(1200px, 100vw);
   margin: 0 auto;
-  padding: 12px;
+  padding: 16px;
   background: #ffffff;
   color: #000000;
+  /* Prevent body overflow */
+  overflow-x: hidden;
+  box-sizing: border-box;
 }
 
 body.dark {
@@ -12,9 +28,16 @@ body.dark {
   color: #f3f4f6;
 }
 
+#root{
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  /* align-items: center; */
+}
 /* Header */
 .header {
   display: flex;
+  width:100%;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 12px;
@@ -36,6 +59,7 @@ body.dark .page-title {
   margin-bottom: 12px;
   background: #f9fafb;
   border-radius: 8px;
+  flex:1;
   padding: 8px;
   border: 1px solid #e5e7eb;
 }
@@ -239,11 +263,15 @@ body.dark .tool-btn:hover {
 
 #content {
   background: #fff;
-  padding: 16px;
   border-radius: 6px;
   line-height: 1.6;
-  max-width: 100% !important;
-  width: 100% !important;
+  /* Prevent text overflow */
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  /* Ensure container doesn't overflow */
+  max-width: 100%;
+  overflow-x: auto;
 }
 
 /* Dark mode for #content only when NOT using source CSS */
@@ -1026,4 +1054,213 @@ body.dark .app-footer a {
 
 body.dark .app-footer a:hover {
   color: #60a5fa;
+}
+
+/* ===================================
+   RESPONSIVE STYLES FOR MOBILE
+   =================================== */
+
+/* Mobile devices (phones) */
+@media (max-width: 640px) {
+  body {
+    padding: 8px;
+  }
+
+  /* Header */
+  .header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .page-title {
+    font-size: 18px;
+  }
+
+  .user-info {
+    width: 100%;
+    justify-content: space-between;
+    padding: 8px;
+  }
+
+  .user-info span {
+    font-size: 13px;
+  }
+
+  /* Toolbar */
+  .toolbar {
+    padding: 6px;
+  }
+
+  .nav-bar {
+    gap: 4px;
+    margin-bottom: 6px;
+  }
+
+  .nav-btn {
+    min-width: 36px;
+    min-height: 36px;
+    padding: 8px;
+  }
+
+  /* URL input form */
+  .url-form {
+    gap: 4px;
+  }
+
+  .url-form input[type="text"] {
+    font-size: 14px;
+    padding: 10px 36px 10px 10px;
+  }
+
+  .submit-btn {
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+
+  /* Controls bar */
+  .controls-bar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .view-controls {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .action-buttons {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  /* Content */
+  #content {
+    padding: 12px;
+    font-size: 15px;
+  }
+
+  /* Tables - make scrollable on mobile */
+  #content table {
+    font-size: 14px;
+  }
+
+  #content th,
+  #content td {
+    padding: 8px 10px;
+  }
+
+  /* Wikipedia infobox - stack on mobile */
+  #content .infobox {
+    float: none;
+    width: 100%;
+    margin: 1em 0;
+  }
+
+  /* Metadata panel */
+  .metadata-panel {
+    padding: 10px;
+    font-size: 13px;
+  }
+
+  .metadata-item {
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .metadata-item .label {
+    min-width: unset;
+  }
+
+  /* Stats grid - single column on mobile */
+  .stat-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  /* Auth card */
+  .auth-card {
+    padding: 24px;
+    margin: 16px;
+  }
+
+  .auth-card h1 {
+    font-size: 20px;
+  }
+
+  /* Footer */
+  .app-footer {
+    padding: 16px 8px;
+    margin-top: 24px;
+    font-size: 12px;
+  }
+
+  .app-footer span {
+    margin: 0 4px;
+  }
+}
+
+/* Small tablets */
+@media (min-width: 641px) and (max-width: 768px) {
+  body {
+    padding: 10px;
+  }
+
+  .page-title {
+    font-size: 19px;
+  }
+
+  #content {
+    padding: 14px;
+  }
+
+  /* Tables */
+  #content table {
+    font-size: 14px;
+  }
+
+  /* Infobox - keep floating but reduce width */
+  #content .infobox {
+    width: 18em;
+  }
+
+  /* Stats grid - 2 columns */
+  .stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Landscape phones */
+@media (max-width: 896px) and (orientation: landscape) {
+  .header {
+    flex-direction: row;
+    justify-content: space-between;
+  }
+
+  .controls-bar {
+    flex-direction: row;
+    justify-content: space-between;
+  }
+}
+
+/* Touch-friendly button sizes */
+@media (hover: none) and (pointer: coarse) {
+  button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .nav-btn {
+    padding: 10px;
+  }
+
+  .submit-btn {
+    padding: 12px 16px;
+  }
+
+  .toggle-control {
+    padding: 8px 0;
+  }
 }

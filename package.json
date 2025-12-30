@@ -10,9 +10,9 @@
   },
   "scripts": {
     "cli": "bun run index.ts",
-    "dev": "bun --hot server.ts",
-    "start": "NODE_ENV=production bun run server.ts",
-    "build": "NODE_ENV=production bun build ./server.ts --compile --outfile downmark",
+    "dev": "bun --hot server.tsx",
+    "start": "NODE_ENV=production bun run server.tsx",
+    "build": "NODE_ENV=production bun build ./server.tsx --compile --outfile downmark",
     "docker:build": "docker build -t downmark .",
     "docker:run": "docker run -p 3000:3000 downmark",
     "docker:up": "docker-compose up",
