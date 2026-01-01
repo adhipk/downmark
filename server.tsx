@@ -99,14 +99,9 @@ const server = Bun.serve({
   routes: {
     "/": {
       GET: async () => {
-        // Get the deployed domain or default to localhost for dev
-        const domain = process.env.FLY_APP_NAME
-          ? `https://${process.env.FLY_APP_NAME}.fly.dev`
-          : `http://localhost:${PORT}`;
-
-        // Redirect to the converted guide, showcasing Downmark's capabilities
-        const guideUrl = `${domain}/guide.md`;
-        return Response.redirect(`/${encodeURIComponent(guideUrl)}`, 302);
+        // Redirect to GitHub README to showcase conversion
+        const githubUrl = "https://github.com/adhipk/downmark";
+        return Response.redirect(`/${encodeURIComponent(githubUrl)}`, 302);
       },
     },
     "/guide.md": {
