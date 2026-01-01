@@ -97,15 +97,6 @@ const server = Bun.serve({
     console: true,
   } : undefined,
   routes: {
-    "/": {
-      GET: async () => {
-        // Return the UI with empty state
-        const html = renderIndexWithState({});
-        return new Response(html, {
-          headers: { "Content-Type": "text/html" },
-        });
-      },
-    },
     "/guide.md": {
       GET: async () => {
         // Serve the raw markdown file
@@ -262,6 +253,122 @@ const server = Bun.serve({
         }
 
         return jsonResponse({ authenticated, username });
+      },
+    },
+    // Dynamic route handler for URL-encoded paths like /https%3A%2F%2Fexample.com%2F
+    "/:path": {
+      GET: async (req, server) => {
+        const url = new URL(req.url);
+        const pathname = url.pathname;
+        
+        // Check if path looks like URL-encoded URL (contains % or starts with http)
+        if (!pathname.startsWith('/') || pathname === '/') {
+          return null; // Not a URL path, fall through to fetch handler
+        }
+        
+        // Try to decode the path as a URL
+        try {
+          let decodedUrl = decodeURIComponent(pathname.slice(1)); // Remove leading slash and decode
+          
+          // Validate it looks like a URL
+          if (!decodedUrl.match(/^https?:\/\//)) {
+            return null; // Not a URL, fall through
+          }
+          
+          // Check auth if enabled
+          if (AUTH_ENABLED) {
+            const authError = requireAuth(req);
+            if (authError) return authError;
+          }
+          
+          console.log(`[Server] Rendering URL from path: ${decodedUrl}`);
+          
+          try {
+            // Stage 1: Fetch page data
+            const pageData = await fetchPageData(decodedUrl, {
+              extractVisibility: false,
+              extractImages: false,
+              extractCss: false,
+            });
+
+            // Stage 2: Select renderer
+            const renderer = rendererRegistry.selectRenderer(decodedUrl);
+            console.log(`[Render] Using renderer: ${renderer.name} for ${decodedUrl}`);
+
+            const processed = await renderer.process(pageData, decodedUrl);
+            const response = await renderer.format(processed, decodedUrl);
+
+            // Stage 3: Build response with initial state for React
+            let responseHtml = response.content;
+
+            if (response.metadataPanel) {
+              responseHtml = response.metadataPanel + "\n" + responseHtml;
+            }
+
+            // Scope source CSS if available
+            if (pageData.cssInfo && pageData.cssInfo.extractedCSS) {
+              const scopeSelector = (selector: string): string => {
+                const trimmed = selector.trim();
+                if (trimmed.includes('#content')) {
+                  return selector;
+                }
+                if (trimmed.match(/^(html|body|:root)(\s|$|,)/)) {
+                  return trimmed.replace(/^(html|body|:root)(\s|$|,)/, '#content$2');
+                }
+                return `#content ${selector}`;
+              };
+
+              const scopedCSS = pageData.cssInfo.extractedCSS
+                .split('\n')
+                .map(line => {
+                  if (!line.trim() || line.trim().startsWith('/*')) return line;
+                  if (line.trim().startsWith('@media') || line.trim().startsWith('@supports')) {
+                    return line;
+                  }
+                  if (line.includes('{') && !line.trim().startsWith('@')) {
+                    const parts = line.split('{');
+                    if (parts.length >= 2) {
+                      const selector = parts[0];
+                      const rules = parts.slice(1).join('{');
+                      const scopedSelectors = selector
+                        .split(',')
+                        .map(s => scopeSelector(s))
+                        .join(', ');
+                      return `${scopedSelectors} { ${rules}`;
+                    }
+                  }
+                  return line;
+                })
+                .join('\n');
+
+              const sourceCSS = `<style id="source-styles">${scopedCSS}</style>`;
+              responseHtml = sourceCSS + "\n" + responseHtml;
+            }
+
+            // Return as full HTML page with initial state for React
+            const fullHtml = renderIndexWithState({
+              url: decodedUrl,
+              content: responseHtml
+            });
+
+            return new Response(fullHtml, {
+              headers: { "Content-Type": "text/html" },
+            });
+          } catch (error: any) {
+            console.error(`Error rendering ${decodedUrl}:`, error);
+            const fullHtml = renderIndexWithState({
+              url: decodedUrl,
+              error: { url: decodedUrl, message: error.message }
+            });
+            return new Response(fullHtml, {
+              status: 200,
+              headers: { "Content-Type": "text/html" },
+            });
+          }
+        } catch (e) {
+          // Not a URL, fall through to fetch handler
+          return null;
+        }
       },
     },
     "/render": {
@@ -866,222 +973,68 @@ const server = Bun.serve({
       },
     },
   },
-
-  // fallback for anything not matched in routes
-  async fetch(req) {
+  fetch: async (req: Request) => {
     const url = new URL(req.url);
     const pathname = url.pathname;
 
-    // Handle static file requests - let Bun transpile TypeScript/JSX
-    if (pathname.startsWith('/src/')) {
+    // Serve static files from public
+    if (pathname.startsWith('/public/')) {
+      const filePath = import.meta.dir + pathname;
       try {
-        const filePath = import.meta.dir + pathname;
-
-        // For TypeScript/TSX files, use Bun.build to transpile
-        if (pathname.endsWith('.tsx') || pathname.endsWith('.ts')) {
-          const result = await Bun.build({
-            entrypoints: [filePath],
-            target: 'browser',
-            format: 'esm',
-            minify: false,
-            splitting: false, // Disable code splitting for single entry point
-            sourcemap: 'none',
-          });
-
-          if (result.outputs.length > 0) {
-            // Bun.build outputs an array - first is the JS, others may be CSS
-            const jsOutput = result.outputs.find(o => o.kind === 'entry-point');
-            const cssOutputs = result.outputs.filter(o => o.kind === 'asset' && o.path.endsWith('.css'));
-
-            if (jsOutput) {
-              let jsContent = await jsOutput.text();
-
-              // If there are CSS outputs, inject them into the JS as style tags
-              if (cssOutputs.length > 0) {
-                const cssInjection = cssOutputs.map(async (cssOut) => {
-                  const cssContent = await cssOut.text();
-                  return `const style_${cssOut.hash} = document.createElement('style');
-style_${cssOut.hash}.textContent = ${JSON.stringify(cssContent)};
-document.head.appendChild(style_${cssOut.hash});`;
-                });
-
-                const injections = await Promise.all(cssInjection);
-                jsContent = injections.join('\n') + '\n' + jsContent;
-              }
-
-              return new Response(jsContent, {
-                headers: { 'Content-Type': 'application/javascript' },
-              });
-            }
-          }
-        }
-
-        // For other files (CSS, JS), serve directly
         const file = Bun.file(filePath);
-        let contentType = 'text/plain';
-        if (pathname.endsWith('.css')) {
-          contentType = 'text/css';
-        } else if (pathname.endsWith('.js')) {
-          contentType = 'application/javascript';
+        if (await file.exists()) {
+          return new Response(file);
         }
-
-        return new Response(file, {
-          headers: { 'Content-Type': contentType },
-        });
       } catch (e) {
-        console.error('Error serving static file:', e);
-        return new Response('Not Found', { status: 404 });
+        // Not found
       }
     }
 
-    // Handle URL-as-path routing: /https%3A%2F%2Fexample.com (URL-encoded)
-    // Also handle /ai/https://example.com for AI renderer
-    // Decode the pathname to handle URL-encoded URLs
-    const decodedPathname = decodeURIComponent(pathname);
-
-    // Check if pathname starts with /ai/ for AI renderer
-    const aiMatch = decodedPathname.match(/^\/ai\/(https?:\/\/.+)$/);
-
-    // Check if pathname starts with /http:// or /https://
-    const urlMatch = decodedPathname.match(/^\/(https?:\/\/.+)$/);
-
-    if (aiMatch || urlMatch) {
-      const targetUrl = aiMatch ? aiMatch[1] : urlMatch![1];
-
-      // Parse query parameters for renderer override
-      const url = new URL(req.url);
-      let rendererName = url.searchParams.get("renderer");
-
-      // If URL starts with /ai/, force AI renderer
-      if (aiMatch && !rendererName) {
-        rendererName = "ai";
-      }
-
-      // Check auth if enabled
-      if (AUTH_ENABLED) {
-        const authError = requireAuth(req);
-        if (authError) return authError;
-      }
-
+    // Serve CSS from src
+    if (pathname.startsWith('/src/') && pathname.endsWith('.css')) {
+      const filePath = import.meta.dir + pathname;
       try {
-        // Stage 1: Fetch page data using smart fetcher
-        const pageData = await fetchPageData(targetUrl, {
-          extractVisibility: false,
-          extractImages: false,
-          extractCss: false,  // Disabled - causing browser timeouts on fly.io
-        });
-
-        // Stage 2: Select and execute renderer
-        let renderer;
-        if (rendererName) {
-          // Use specified renderer if provided
-          const allRenderers = rendererRegistry.getAll();
-          renderer = allRenderers.find(r => r.name === rendererName);
-          if (!renderer) {
-            return new Response(renderIndexWithState({
-              error: {
-                url: targetUrl,
-                message: `Renderer '${rendererName}' not found`,
-              },
-            }), {
-              status: 400,
-              headers: { "Content-Type": "text/html" },
-            });
-          }
-        } else {
-          // Auto-select based on URL patterns
-          renderer = rendererRegistry.selectRenderer(targetUrl);
+        const file = Bun.file(filePath);
+        if (await file.exists()) {
+          return new Response(file, { headers: { 'Content-Type': 'text/css' } });
         }
-        console.log(`[Render] Using renderer: ${renderer.name} for ${targetUrl}`);
-
-        const processed = await renderer.process(pageData, targetUrl);
-        const response = await renderer.format(processed, targetUrl);
-
-        // Stage 3: Build final response
-        let responseHtml = response.content;
-
-        // Add metadata panel if available
-        if (response.metadataPanel) {
-          responseHtml = response.metadataPanel + "\n" + responseHtml;
-        }
-
-        // Inject source CSS to preserve original layouts (scoped to #content only)
-        if (pageData.cssInfo && pageData.cssInfo.extractedCSS) {
-          const scopeSelector = (selector: string): string => {
-            const trimmed = selector.trim();
-
-            if (trimmed.includes('#content')) {
-              return selector;
-            }
-
-            if (trimmed.match(/^(html|body|:root)(\s|$|,)/)) {
-              return trimmed.replace(/^(html|body|:root)(\s|$|,)/, '#content$2');
-            }
-
-            return `#content ${selector}`;
-          };
-
-          const scopedCSS = pageData.cssInfo.extractedCSS
-            .split('\n')
-            .map(line => {
-              if (!line.trim() || line.trim().startsWith('/*')) return line;
-
-              if (line.trim().startsWith('@media') || line.trim().startsWith('@supports')) {
-                return line;
-              }
-
-              if (line.includes('{') && !line.trim().startsWith('@')) {
-                const parts = line.split('{');
-                if (parts.length >= 2) {
-                  const selector = parts[0];
-                  const rules = parts.slice(1).join('{');
-
-                  const scopedSelectors = selector
-                    .split(',')
-                    .map(s => scopeSelector(s))
-                    .join(', ');
-
-                  return `${scopedSelectors} { ${rules}`;
-                }
-              }
-              return line;
-            })
-            .join('\n');
-
-          const sourceCSS = `
-            <style id="source-styles">
-              ${scopedCSS}
-            </style>
-          `;
-          responseHtml = sourceCSS + "\n" + responseHtml;
-        }
-
-        // Build full HTML page with the app UI
-        const fullPage = await renderIndexWithState({
-          url: targetUrl,
-          content: responseHtml,
-        });
-
-        return new Response(fullPage, {
-          headers: { "Content-Type": "text/html" },
-        });
-      } catch (error: any) {
-        console.error(`Error rendering ${targetUrl}:`, error);
-        const errorPage = await renderIndexWithState({
-          error: {
-            url: targetUrl,
-            message: error.message,
-          },
-        });
-
-        return new Response(errorPage, {
-          status: 200,
-          headers: { "Content-Type": "text/html" },
-        });
+      } catch (e) {
+        // Not found
       }
     }
 
-    return new Response("Not Found", { status: 404 });
+    // Skip static files and favicon
+    if (/\.(ico|png|jpg|jpeg|gif|svg|woff|woff2|ttf|eot)$/i.test(pathname)) {
+      return new Response('Not Found', { status: 404 });
+    }
+
+    // For any other route not handled by routes above, serve index.html (SPA fallback)
+    // But skip if it looks like a URL-encoded path (those should be handled by /:path route)
+    const looksLikeUrlPath = pathname.includes('%') || 
+                             (pathname.length > 1 && /^\/[a-zA-Z0-9%\-._~:/?#\[\]@!$&'()*+,;=]+$/.test(pathname));
+    
+    if (!looksLikeUrlPath &&
+        !pathname.startsWith('/api/') && 
+        !pathname.startsWith('/auth/') &&
+        !pathname.startsWith('/render') &&
+        !pathname.startsWith('/markdown') &&
+        !pathname.startsWith('/guide') &&
+        !pathname.startsWith('/docs') &&
+        !pathname.startsWith('/config') &&
+        !pathname.startsWith('/renderers')) {
+      try {
+        const indexPath = import.meta.dir + "/index.html";
+        const indexFile = Bun.file(indexPath);
+        if (await indexFile.exists()) {
+          const html = await indexFile.text();
+          return new Response(html, { headers: { 'Content-Type': 'text/html' } });
+        }
+      } catch (e) {
+        // Fall through
+      }
+    }
+
+    return new Response('Not Found', { status: 404 });
   },
 });
 

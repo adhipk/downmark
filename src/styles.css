@@ -1282,3 +1282,37 @@ body.dark .docs-content kbd {
     padding: 8px 0;
   }
 }
+/* Metadata Panel */
+.metadata-panel {
+  width: 100%;
+  margin: 16px 0;
+  padding: 0;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.metadata-content {
+  padding: 12px 0;
+}
+
+.page-heading {
+  margin: 0 0 8px 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: #1f2937;
+  line-height: 1.3;
+}
+
+body.dark .page-heading {
+  color: #f3f4f6;
+}
+
+.page-description {
+  margin: 0;
+  font-size: 14px;
+  color: #6b7280;
+  line-height: 1.5;
+}
+
+body.dark .page-description {
+  color: #d1d5db;
+}

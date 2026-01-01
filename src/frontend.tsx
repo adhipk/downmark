@@ -186,6 +186,55 @@ function ConverterApp({ username, onLogout }: { username: string | null; onLogou
     window.location.href = `${prefix}${encodeURIComponent(url)}`;
   }, [historyIndex, history]);
 
+  const extractMetadata = useCallback(() => {
+    try {
+      const contentDiv = document.getElementById('content');
+      if (!contentDiv) return;
+
+      // Extract title from various sources
+      let title = '';
+      
+      // Try h1 tag first
+      const h1 = contentDiv.querySelector('h1');
+      if (h1) {
+        title = h1.textContent || '';
+      }
+      
+      // Try to extract from meta tags if present
+      if (!title) {
+        const metaTitle = contentDiv.querySelector('meta[name="og:title"]');
+        if (metaTitle) {
+          title = metaTitle.getAttribute('content') || '';
+        }
+      }
+
+      // Extract description from meta tags
+      let description = '';
+      const metaDesc = contentDiv.querySelector('meta[name="og:description"]') || 
+                       contentDiv.querySelector('meta[name="description"]');
+      if (metaDesc) {
+        description = metaDesc.getAttribute('content') || '';
+      }
+
+      // Populate metadata panel
+      const metadataPanel = document.getElementById('metadata-panel');
+      if (metadataPanel) {
+        if (title || description) {
+          metadataPanel.innerHTML = `
+            <div class="metadata-content">
+              ${title ? `<h2 class="page-heading">${DOMPurify.sanitize(title)}</h2>` : ''}
+              ${description ? `<p class="page-description">${DOMPurify.sanitize(description)}</p>` : ''}
+            </div>
+          `;
+        } else {
+          metadataPanel.innerHTML = '';
+        }
+      }
+    } catch (error) {
+      console.error('[Frontend] Error extracting metadata:', error);
+    }
+  }, []);
+
   useEffect(() => {
     // Process htmx attributes after component mounts
     if (window.htmx) {
@@ -256,6 +305,8 @@ function ConverterApp({ username, onLogout }: { username: string | null; onLogou
       const contentDiv = document.getElementById('content');
       if (contentDiv) {
         contentDiv.innerHTML = DOMPurify.sanitize(initialContent);
+        // Extract and display metadata
+        setTimeout(() => extractMetadata(), 0);
       }
 
       // Add to history

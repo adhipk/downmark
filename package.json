@@ -10,13 +10,18 @@
   },
   "scripts": {
     "cli": "bun run index.ts",
-    "dev": "bun --hot server.tsx",
-    "start": "NODE_ENV=production bun run server.tsx",
-    "build": "NODE_ENV=production bun build ./server.tsx --compile --outfile downmark",
+    "build:frontend": "bun build.ts",
+    "dev:pandoc": "cd pandoc-service && bun server.ts",
+    "dev": "bun run build:frontend && bun --hot server.tsx",
+    "dev:all": "bun run build:frontend && (cd pandoc-service && bun server.ts &) && bun --hot server.tsx",
+    "build": "bun run build:frontend && NODE_ENV=production bun build ./server.tsx --compile --outfile downmark",
+    "start": "bun run build:frontend && NODE_ENV=production bun run server.tsx",
+    "start:all": "bun run build:frontend && (cd pandoc-service && bun server.ts &) && NODE_ENV=production bun run server.tsx",
     "docker:build": "docker build -t downmark .",
     "docker:run": "docker run -p 3000:3000 downmark",
     "docker:up": "docker-compose up",
-    "docker:down": "docker-compose down"
+    "docker:down": "docker-compose down",
+    "tsc":"bunx tsc --noEmit"
   },
   "devDependencies": {
     "@types/bun": "latest",

@@ -35,7 +35,7 @@ export function PageTemplate({ url, content, error }: PageTemplateProps) {
       </head>
       <body>
         <div id="root"></div>
-        <script type="module" src="/src/frontend.tsx"></script>
+        <script type="module" src="/public/frontend.js"></script>
         {initialState && (
           <script dangerouslySetInnerHTML={{ __html: initialState }} />
         )}

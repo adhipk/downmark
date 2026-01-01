@@ -104,8 +104,8 @@ export async function getPageData(url: string, options: {
     }
 
     const waitStrategy = (process.env.BROWSER_WAIT_STRATEGY || "domcontentloaded") as "load" | "domcontentloaded" | "networkidle0" | "networkidle2";
-    const browserTimeout = parseInt(process.env.BROWSER_TIMEOUT || "30000", 10);
-    const waitTimeout = parseInt(process.env.BROWSER_WAIT_TIMEOUT || "10000", 10);
+    const browserTimeout = parseInt(process.env.BROWSER_TIMEOUT || "60000", 10);
+    const waitTimeout = parseInt(process.env.BROWSER_WAIT_TIMEOUT || "15000", 10);
     const referer = process.env.BROWSER_REFERER || "https://www.google.com/";
 
     await page.goto(url, {

@@ -316,6 +316,18 @@ export function transformLinksToHtmx(html: string, baseUrl: string): string {
       return; // Invalid URL, skip
     }
 
+    // Check if this is an in-page link (same page with hash)
+    // Remove hash fragments for comparison
+    const absoluteUrlWithoutHash = absoluteUrl.split('#')[0];
+    const baseUrlWithoutHash = baseUrl.split('#')[0];
+
+    if (absoluteUrlWithoutHash === baseUrlWithoutHash && absoluteUrl.includes('#')) {
+      // This is an in-page link to the current page, convert to hash-only
+      const hashFragment = '#' + absoluteUrl.split('#')[1];
+      anchor.setAttribute('href', hashFragment);
+      return; // Don't add htmx attributes
+    }
+
     // Add htmx attributes to load in-app
     anchor.setAttribute('hx-get', `/render?q=${encodeURIComponent(absoluteUrl)}`);
     anchor.setAttribute('hx-target', '#content');

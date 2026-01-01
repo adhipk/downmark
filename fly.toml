@@ -15,6 +15,7 @@ primary_region = 'sjc'
   auto_start_machines = true
   min_machines_running = 0
   processes = ['app']
+  http_request_timeout = 120
 
   [http_service.concurrency]
     type = 'connections'
@@ -29,3 +30,8 @@ primary_region = 'sjc'
   PORT = '3000'
   HOST = '0.0.0.0'
   NODE_ENV = 'production'
+  PANDOC_SERVICE_URL = 'http://downmark-pandoc.internal:3001'
+  RP_ID = 'downmark.fly.dev'
+  RP_NAME = 'Downmark - Web to Markdown'
+  ORIGIN = 'https://downmark.fly.dev'
+  AUTH_ENABLED = 'false'

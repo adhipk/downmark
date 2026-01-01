@@ -34,6 +34,9 @@ RUN bun install --frozen-lockfile --production
 # Copy application code
 COPY . .
 
+# Build the frontend bundle
+RUN bun run build:frontend
+
 # Set environment variables for Puppeteer
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
