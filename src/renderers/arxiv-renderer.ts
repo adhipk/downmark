@@ -91,59 +91,43 @@ export class ArxivRenderer extends BaseRenderer {
   }
 
   /**
-   * Clean up the author section by reformatting it for better readability
+   * Clean up the author section by removing clutter while keeping names
    */
   private cleanupAuthors(content: Element): void {
     const authorsSection = content.querySelector(".ltx_authors");
     if (!authorsSection) return;
 
-    // Find all author entries
-    const authors = authorsSection.querySelectorAll(".ltx_author");
-
-    if (authors.length === 0) return;
-
-    // Build a cleaner author list
-    const authorList: string[] = [];
-
-    authors.forEach((author: Element) => {
-      const personName = author.querySelector(".ltx_personname")?.textContent?.trim();
-      const contact = author.querySelector(".ltx_contact")?.textContent?.trim();
-
-      if (personName) {
-        let authorStr = personName;
-        if (contact && !contact.includes("@")) {
-          // Add affiliation if it's not an email
-          authorStr += ` (${contact})`;
-        }
-        authorList.push(authorStr);
-      }
-    });
-
-    // Only remove the outer footnote containers in author section, not the markers themselves
-    authorsSection.querySelectorAll(".ltx_note_outer").forEach((el: Element) => {
+    // Remove all footnote markers and notes from author section
+    authorsSection.querySelectorAll("sup.ltx_note_mark, .ltx_note_outer, .ltx_note").forEach((el: Element) => {
       el.remove();
     });
 
-    // Remove just the role spans
-    authorsSection.querySelectorAll(".ltx_role").forEach((el: Element) => {
+    // Remove email addresses (in typewriter font)
+    authorsSection.querySelectorAll(".ltx_text.ltx_font_typewriter").forEach((el: Element) => {
       el.remove();
     });
 
-    // Create a clean author display
-    if (authorList.length > 0) {
-      const cleanAuthorsHtml = `
-        <div class="ltx_authors_clean">
-          <div class="ltx_author_list">
-            ${authorList.map(author => `<span class="ltx_author_name">${this.escape(author)}</span>`).join(' • ')}
-          </div>
-        </div>
-      `;
+    // Remove br tags for cleaner layout
+    authorsSection.querySelectorAll("br").forEach((el: Element) => {
+      // Replace with space
+      const textNode = content.ownerDocument.createTextNode(" ");
+      el.parentNode?.replaceChild(textNode, el);
+    });
 
-      // Replace the messy authors section with our clean version
-      const tempDiv = content.ownerDocument.createElement('div');
-      tempDiv.innerHTML = cleanAuthorsHtml;
-      authorsSection.replaceWith(tempDiv.firstElementChild as Element);
-    }
+    // Remove the author notes section
+    authorsSection.querySelectorAll(".ltx_author_notes").forEach((el: Element) => {
+      el.remove();
+    });
+
+    // Clean up extra whitespace
+    const authorText = authorsSection.textContent || "";
+    const cleanedText = authorText
+      .replace(/\s+/g, " ")  // Multiple spaces to single space
+      .replace(/\s*&\s*/g, " • ")  // & to bullet
+      .trim();
+
+    // Replace entire section with cleaned text
+    authorsSection.innerHTML = `<div class="ltx_authors_clean">${this.escape(cleanedText)}</div>`;
 
     // Remove the contribution footnotes section throughout the document
     const footnotes = content.querySelectorAll(".ltx_note_outer");
@@ -177,8 +161,9 @@ export class ArxivRenderer extends BaseRenderer {
       const footnoteText = footnoteContent.textContent?.trim() || "";
 
       // Create a link that will navigate within the page
+      // Use onclick to scroll instead of href to avoid HTMX processing
       const markText = marker.textContent || "";
-      const linkHtml = `<a href="#footnote-${footnoteId}" class="footnote-link" title="${this.escape(footnoteText)}">${this.escape(markText)}</a>`;
+      const linkHtml = `<a href="javascript:void(0)" onclick="document.getElementById('footnote-${footnoteId}')?.scrollIntoView({behavior:'smooth'})" class="footnote-link" title="${this.escape(footnoteText)}">${this.escape(markText)}</a>`;
 
       marker.innerHTML = linkHtml;
     });
