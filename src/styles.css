@@ -1056,6 +1056,24 @@ body.dark .app-footer a:hover {
   color: #60a5fa;
 }
 
+/* Documentation styles */
+.docs-content kbd {
+  display: inline-block;
+  padding: 2px 6px;
+  font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+  font-size: 0.85em;
+  background: #f1f3f5;
+  border: 1px solid #ced4da;
+  border-radius: 3px;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.1);
+}
+
+body.dark .docs-content kbd {
+  background: #374151;
+  border-color: #4b5563;
+  color: #f3f4f6;
+}
+
 /* ===================================
    RESPONSIVE STYLES FOR MOBILE
    =================================== */

@@ -6,6 +6,7 @@ import * as auth from "./src/auth.ts";
 import { rendererRegistry } from "./src/renderer-registry.ts";
 import { renderToString } from "react-dom/server";
 import { PageTemplate } from "./src/page-template.tsx";
+import { DocsContent } from "./src/docs-content.tsx";
 
 // Graceful shutdown
 process.on("SIGINT", async () => {
@@ -87,7 +88,104 @@ const server = Bun.serve({
     console: true,
   } : undefined,
   routes: {
-    "/": indexFile,
+    "/": {
+      GET: async () => {
+        try {
+          // Fetch README.md from GitHub
+          const readmeUrl = "https://raw.githubusercontent.com/adhipk/downmark/main/README.md";
+          const response = await fetch(readmeUrl);
+
+          if (!response.ok) {
+            throw new Error(`Failed to fetch README: ${response.status}`);
+          }
+
+          const readmeContent = await response.text();
+
+          // Convert markdown to HTML using marked
+          const htmlContent = await marked.parse(readmeContent);
+
+          // Wrap in a styled container
+          const docsHtml = `
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>Documentation - Downmark</title>
+              <style>
+                body {
+                  font-family: system-ui, -apple-system, sans-serif;
+                  margin: 40px auto;
+                  max-width: 800px;
+                  padding: 20px;
+                  line-height: 1.6;
+                  color: #333;
+                  background: #f9fafb;
+                }
+                h1, h2, h3 { color: #1f2937; }
+                h1 { border-bottom: 2px solid #e5e7eb; padding-bottom: 10px; }
+                h2 { margin-top: 2em; border-bottom: 1px solid #e5e7eb; padding-bottom: 5px; }
+                code {
+                  background: #f3f4f6;
+                  padding: 2px 6px;
+                  border-radius: 3px;
+                  font-family: 'Monaco', 'Courier New', monospace;
+                  font-size: 0.9em;
+                }
+                pre {
+                  background: #1f2937;
+                  color: #f3f4f6;
+                  padding: 15px;
+                  border-radius: 6px;
+                  overflow-x: auto;
+                }
+                pre code {
+                  background: transparent;
+                  padding: 0;
+                  color: inherit;
+                }
+                a {
+                  color: #2563eb;
+                  text-decoration: none;
+                }
+                a:hover {
+                  text-decoration: underline;
+                }
+              </style>
+            </head>
+            <body>
+              ${htmlContent}
+            </body>
+            </html>
+          `;
+
+          return new Response(docsHtml, {
+            headers: { "Content-Type": "text/html" },
+          });
+        } catch (error: any) {
+          return new Response(`Error loading documentation: ${error.message}`, {
+            status: 500,
+            headers: { "Content-Type": "text/plain" },
+          });
+        }
+      },
+    },
+    "/docs": {
+      GET: () => {
+        // Render docs content as HTML
+        const docsHtml = renderToString(<DocsContent />);
+
+        // Wrap in styled content div for Downmark CSS
+        const content = `<div id="content" class="styled">${docsHtml}</div>`;
+
+        return new Response(renderIndexWithState({
+          url: 'Documentation',
+          content
+        }), {
+          headers: { "Content-Type": "text/html" },
+        });
+      },
+    },
     "/config": {
       GET: () => {
         return jsonResponse({
@@ -221,6 +319,7 @@ const server = Bun.serve({
 
         const url = new URL(req.url);
         const targetUrl = url.searchParams.get("q");
+        const rendererName = url.searchParams.get("renderer"); // Optional renderer override
 
         if (!targetUrl) {
           return jsonResponse({ error: "Missing 'q' parameter with URL" }, 400);
@@ -235,7 +334,18 @@ const server = Bun.serve({
           });
 
           // Stage 2: Select and execute renderer
-          const renderer = rendererRegistry.selectRenderer(targetUrl);
+          let renderer;
+          if (rendererName) {
+            // Use specified renderer if provided
+            const allRenderers = rendererRegistry.getAll();
+            renderer = allRenderers.find(r => r.name === rendererName);
+            if (!renderer) {
+              return jsonResponse({ error: `Renderer '${rendererName}' not found` }, 400);
+            }
+          } else {
+            // Auto-select based on URL patterns
+            renderer = rendererRegistry.selectRenderer(targetUrl);
+          }
           console.log(`[Render] Using renderer: ${renderer.name} for ${targetUrl}`);
 
           const processed = await renderer.process(pageData, targetUrl);
@@ -805,14 +915,27 @@ document.head.appendChild(style_${cssOut.hash});`;
     }
 
     // Handle URL-as-path routing: /https%3A%2F%2Fexample.com (URL-encoded)
+    // Also handle /ai/https://example.com for AI renderer
     // Decode the pathname to handle URL-encoded URLs
     const decodedPathname = decodeURIComponent(pathname);
+
+    // Check if pathname starts with /ai/ for AI renderer
+    const aiMatch = decodedPathname.match(/^\/ai\/(https?:\/\/.+)$/);
 
     // Check if pathname starts with /http:// or /https://
     const urlMatch = decodedPathname.match(/^\/(https?:\/\/.+)$/);
 
-    if (urlMatch) {
-      const targetUrl = urlMatch[1];
+    if (aiMatch || urlMatch) {
+      const targetUrl = aiMatch ? aiMatch[1] : urlMatch![1];
+
+      // Parse query parameters for renderer override
+      const url = new URL(req.url);
+      let rendererName = url.searchParams.get("renderer");
+
+      // If URL starts with /ai/, force AI renderer
+      if (aiMatch && !rendererName) {
+        rendererName = "ai";
+      }
 
       // Check auth if enabled
       if (AUTH_ENABLED) {
@@ -829,7 +952,26 @@ document.head.appendChild(style_${cssOut.hash});`;
         });
 
         // Stage 2: Select and execute renderer
-        const renderer = rendererRegistry.selectRenderer(targetUrl);
+        let renderer;
+        if (rendererName) {
+          // Use specified renderer if provided
+          const allRenderers = rendererRegistry.getAll();
+          renderer = allRenderers.find(r => r.name === rendererName);
+          if (!renderer) {
+            return new Response(renderIndexWithState({
+              error: {
+                url: targetUrl,
+                message: `Renderer '${rendererName}' not found`,
+              },
+            }), {
+              status: 400,
+              headers: { "Content-Type": "text/html" },
+            });
+          }
+        } else {
+          // Auto-select based on URL patterns
+          renderer = rendererRegistry.selectRenderer(targetUrl);
+        }
         console.log(`[Render] Using renderer: ${renderer.name} for ${targetUrl}`);
 
         const processed = await renderer.process(pageData, targetUrl);

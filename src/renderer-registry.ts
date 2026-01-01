@@ -1,6 +1,7 @@
 import type { IRenderer } from "./renderer-interface.ts";
 import { DefaultRenderer } from "./renderers/default-renderer.ts";
 import { WikipediaRenderer } from "./renderers/wikipedia-renderer.ts";
+import { AIRenderer } from "./renderers/ai-renderer.ts";
 
 /**
  * Domain pattern matching using minimatch-style patterns
@@ -64,6 +65,7 @@ export class RendererRegistry {
     // Register all custom renderers here
     const renderers = [
       new WikipediaRenderer(),
+      new AIRenderer(),
       // Add new renderers here as they are created
     ];
 

@@ -118,8 +118,12 @@ function ConverterApp({ username, onLogout }: { username: string | null; onLogou
 
     setUrlError("");
 
+    // Check if we're currently using AI renderer (path starts with /ai/)
+    const isAiMode = window.location.pathname.startsWith('/ai/');
+
     // Navigate to the URL using the new shareable format (URL-encoded)
-    window.location.href = `/${encodeURIComponent(normalizedUrl)}`;
+    const prefix = isAiMode ? '/ai/' : '/';
+    window.location.href = `${prefix}${encodeURIComponent(normalizedUrl)}`;
   }, []);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -157,9 +161,14 @@ function ConverterApp({ username, onLogout }: { username: string | null; onLogou
 
     const newIndex = historyIndex - 1;
     const url = history[newIndex];
+    if (!url) return;
+
+    // Check if we're currently using AI renderer (path starts with /ai/)
+    const isAiMode = window.location.pathname.startsWith('/ai/');
 
     // Navigate using the new URL format (URL-encoded)
-    window.location.href = `/${encodeURIComponent(url)}`;
+    const prefix = isAiMode ? '/ai/' : '/';
+    window.location.href = `${prefix}${encodeURIComponent(url)}`;
   }, [historyIndex, history]);
 
   const goForward = useCallback(() => {
@@ -167,9 +176,14 @@ function ConverterApp({ username, onLogout }: { username: string | null; onLogou
 
     const newIndex = historyIndex + 1;
     const url = history[newIndex];
+    if (!url) return;
+
+    // Check if we're currently using AI renderer (path starts with /ai/)
+    const isAiMode = window.location.pathname.startsWith('/ai/');
 
     // Navigate using the new URL format (URL-encoded)
-    window.location.href = `/${encodeURIComponent(url)}`;
+    const prefix = isAiMode ? '/ai/' : '/';
+    window.location.href = `${prefix}${encodeURIComponent(url)}`;
   }, [historyIndex, history]);
 
   useEffect(() => {
@@ -212,8 +226,12 @@ function ConverterApp({ username, onLogout }: { username: string | null; onLogou
             }
           }
 
-          // Navigate to localhost/url format
-          window.location.href = `/${encodeURIComponent(absoluteUrl)}`;
+          // Check if we're currently using AI renderer (path starts with /ai/)
+          const isAiMode = window.location.pathname.startsWith('/ai/');
+
+          // Navigate to localhost/url format, preserving AI mode if active
+          const prefix = isAiMode ? '/ai/' : '/';
+          window.location.href = `${prefix}${encodeURIComponent(absoluteUrl)}`;
         } catch (err) {
           console.error('Error processing link:', err);
         }
@@ -397,6 +415,10 @@ function ConverterApp({ username, onLogout }: { username: string | null; onLogou
       <main id="content"></main>
 
       <footer className="app-footer">
+        <a href="/docs">
+          Documentation
+        </a>
+        <span>·</span>
         <a href="https://github.com/adhipk/downmark" target="_blank" rel="noopener noreferrer">
           Source Code
         </a>
