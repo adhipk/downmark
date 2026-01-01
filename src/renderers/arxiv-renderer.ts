@@ -33,6 +33,10 @@ export class ArxivRenderer extends BaseRenderer {
     // Clean up author section
     this.cleanupAuthors(content);
 
+    // Convert footnotes and citations to clickable links
+    this.convertFootnotesToLinks(content, sourceUrl);
+    this.convertCitationsToLinks(content, sourceUrl);
+
     // Remove unnecessary elements
     const selectorsToRemove = [
       ".ltx_page_header", // Header
@@ -115,8 +119,13 @@ export class ArxivRenderer extends BaseRenderer {
       }
     });
 
-    // Remove all footnote markers and references
-    authorsSection.querySelectorAll("sup, .ltx_note, .ltx_role").forEach((el: Element) => {
+    // Only remove the outer footnote containers in author section, not the markers themselves
+    authorsSection.querySelectorAll(".ltx_note_outer").forEach((el: Element) => {
+      el.remove();
+    });
+
+    // Remove just the role spans
+    authorsSection.querySelectorAll(".ltx_role").forEach((el: Element) => {
       el.remove();
     });
 
@@ -136,7 +145,7 @@ export class ArxivRenderer extends BaseRenderer {
       authorsSection.replaceWith(tempDiv.firstElementChild as Element);
     }
 
-    // Remove the contribution footnotes section if it exists
+    // Remove the contribution footnotes section throughout the document
     const footnotes = content.querySelectorAll(".ltx_note_outer");
     footnotes.forEach((note: Element) => {
       const noteContent = note.textContent || "";
@@ -145,6 +154,71 @@ export class ArxivRenderer extends BaseRenderer {
           noteContent.includes("Work performed while") ||
           noteContent.includes("Listing order is random")) {
         note.remove();
+      }
+    });
+  }
+
+  /**
+   * Convert footnote markers to clickable links that scroll to the footnote
+   */
+  private convertFootnotesToLinks(content: Element, sourceUrl: string): void {
+    // Find all footnote markers (superscripts with footnote class)
+    const footnoteMarkers = content.querySelectorAll("sup.ltx_note_mark");
+
+    footnoteMarkers.forEach((marker: Element) => {
+      const footnoteId = marker.parentElement?.getAttribute("id");
+      if (!footnoteId) return;
+
+      // Find the corresponding footnote content
+      const footnoteContent = content.querySelector(`#${footnoteId} .ltx_note_content`);
+      if (!footnoteContent) return;
+
+      // Get the footnote text
+      const footnoteText = footnoteContent.textContent?.trim() || "";
+
+      // Create a link that will navigate within the page
+      const markText = marker.textContent || "";
+      const linkHtml = `<a href="#footnote-${footnoteId}" class="footnote-link" title="${this.escape(footnoteText)}">${this.escape(markText)}</a>`;
+
+      marker.innerHTML = linkHtml;
+    });
+
+    // Add IDs to footnote content sections so links can target them
+    const footnoteContents = content.querySelectorAll(".ltx_note_content");
+    footnoteContents.forEach((footnote: Element) => {
+      const parent = footnote.parentElement;
+      if (parent) {
+        const parentId = parent.getAttribute("id");
+        if (parentId) {
+          footnote.setAttribute("id", `footnote-${parentId}`);
+        }
+      }
+    });
+  }
+
+  /**
+   * Convert citation references to clickable links
+   */
+  private convertCitationsToLinks(content: Element, sourceUrl: string): void {
+    // Find all citation links
+    const citations = content.querySelectorAll(".ltx_cite a.ltx_ref");
+
+    citations.forEach((citation: Element) => {
+      const href = citation.getAttribute("href");
+      if (!href) return;
+
+      // If it's a relative link, convert it to point to the full URL
+      if (href.startsWith("#")) {
+        const targetId = href.slice(1);
+        const target = content.querySelector(`#${targetId}`);
+
+        if (target) {
+          // Add a title with the citation text for hover
+          const citationText = target.textContent?.trim() || "";
+          if (citationText) {
+            citation.setAttribute("title", citationText.slice(0, 200));
+          }
+        }
       }
     });
   }
