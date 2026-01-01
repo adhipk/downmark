@@ -919,6 +919,9 @@ document.head.appendChild(style_${cssOut.hash});`;
     // Decode the pathname to handle URL-encoded URLs
     const decodedPathname = decodeURIComponent(pathname);
 
+    console.log(`[Routing] pathname: ${pathname}`);
+    console.log(`[Routing] decodedPathname: ${decodedPathname}`);
+
     // Check if pathname starts with /ai/ for AI renderer
     const aiMatch = decodedPathname.match(/^\/ai\/(https?:\/\/.+)$/);
 
@@ -927,6 +930,7 @@ document.head.appendChild(style_${cssOut.hash});`;
 
     if (aiMatch || urlMatch) {
       const targetUrl = aiMatch ? aiMatch[1] : urlMatch![1];
+      console.log(`[Routing] aiMatch: ${!!aiMatch}, targetUrl: ${targetUrl}`);
 
       // Parse query parameters for renderer override
       const url = new URL(req.url);
