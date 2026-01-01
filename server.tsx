@@ -99,9 +99,11 @@ const server = Bun.serve({
   routes: {
     "/": {
       GET: async () => {
-        // Redirect to GitHub README to showcase conversion
-        const githubUrl = "https://github.com/adhipk/downmark";
-        return Response.redirect(`/${encodeURIComponent(githubUrl)}`, 302);
+        // Return the UI with empty state
+        const html = renderIndexWithState({});
+        return new Response(html, {
+          headers: { "Content-Type": "text/html" },
+        });
       },
     },
     "/guide.md": {
