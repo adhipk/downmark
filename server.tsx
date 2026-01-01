@@ -283,7 +283,7 @@ const server = Bun.serve({
           const pageData = await fetchPageData(targetUrl, {
             extractVisibility: false,  // Skip - not needed for rendering
             extractImages: false,       // Skip - not needed for rendering
-            extractCss: true,           // Extract CSS to preserve original styling
+            extractCss: false,          // Disabled - causing browser timeouts on fly.io
           });
 
           // Stage 2: Select and execute renderer
@@ -966,7 +966,7 @@ document.head.appendChild(style_${cssOut.hash});`;
         const pageData = await fetchPageData(targetUrl, {
           extractVisibility: false,
           extractImages: false,
-          extractCss: true,  // Extract CSS to preserve original styling
+          extractCss: false,  // Disabled - causing browser timeouts on fly.io
         });
 
         // Stage 2: Select and execute renderer
