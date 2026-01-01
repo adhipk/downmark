@@ -1,6 +1,8 @@
-import { getPageData, closeBrowser } from "./src/browser.ts";
+import { closeBrowser } from "./src/browser.ts";
+import { fetchPageData } from "./src/page-fetcher.ts";
 import { extractContent, removeBoilerplate, transformLinksToHtmx, extractAllLinks, transformImagesToAbsolute } from "./src/extractor.ts";
 import { htmlToMarkdown } from "./src/markdown.ts";
+import { convertHtmlToMarkdown as pandocConvert, healthCheck as pandocHealthCheck } from "./src/pandoc-client.ts";
 import { marked } from "marked";
 import * as auth from "./src/auth.ts";
 import { rendererRegistry } from "./src/renderer-registry.ts";
@@ -17,8 +19,11 @@ process.on("SIGINT", async () => {
 
 process.on("SIGTERM", async () => {
   console.log("\nShutting down gracefully...");
-  await closeBrowser();
-  process.exit(0);
+  // Give in-flight requests 10 seconds to complete
+  setTimeout(async () => {
+    await closeBrowser();
+    process.exit(0);
+  }, 10000);
 });
 
 const jsonResponse = (data: any, status = 200) => {
@@ -80,6 +85,10 @@ console.log("[Server] Discovering renderers...");
 await rendererRegistry.discoverRenderers();
 console.log("[Server] Renderer discovery complete.");
 
+// Check pandoc service health
+const pandocAvailable = await pandocHealthCheck();
+console.log(`[Server] Pandoc service: ${pandocAvailable ? "✓ Available" : "✗ Not available (markdown conversion disabled)"}`);
+
 const server = Bun.serve({
   port: PORT,
   hostname: HOST,
@@ -90,80 +99,29 @@ const server = Bun.serve({
   routes: {
     "/": {
       GET: async () => {
+        // Get the deployed domain or default to localhost for dev
+        const domain = process.env.FLY_APP_NAME
+          ? `https://${process.env.FLY_APP_NAME}.fly.dev`
+          : `http://localhost:${PORT}`;
+
+        // Redirect to the converted guide, showcasing Downmark's capabilities
+        const guideUrl = `${domain}/guide.md`;
+        return Response.redirect(`/${encodeURIComponent(guideUrl)}`, 302);
+      },
+    },
+    "/guide.md": {
+      GET: async () => {
+        // Serve the raw markdown file
         try {
-          // Fetch README.md from GitHub
-          const readmeUrl = "https://raw.githubusercontent.com/adhipk/downmark/main/README.md";
-          const response = await fetch(readmeUrl);
+          const guidePath = import.meta.dir + "/GUIDE.md";
+          const guideFile = Bun.file(guidePath);
+          const guideContent = await guideFile.text();
 
-          if (!response.ok) {
-            throw new Error(`Failed to fetch README: ${response.status}`);
-          }
-
-          const readmeContent = await response.text();
-
-          // Convert markdown to HTML using marked
-          const htmlContent = await marked.parse(readmeContent);
-
-          // Wrap in a styled container
-          const docsHtml = `
-            <!DOCTYPE html>
-            <html lang="en">
-            <head>
-              <meta charset="UTF-8">
-              <meta name="viewport" content="width=device-width, initial-scale=1.0">
-              <title>Documentation - Downmark</title>
-              <style>
-                body {
-                  font-family: system-ui, -apple-system, sans-serif;
-                  margin: 40px auto;
-                  max-width: 800px;
-                  padding: 20px;
-                  line-height: 1.6;
-                  color: #333;
-                  background: #f9fafb;
-                }
-                h1, h2, h3 { color: #1f2937; }
-                h1 { border-bottom: 2px solid #e5e7eb; padding-bottom: 10px; }
-                h2 { margin-top: 2em; border-bottom: 1px solid #e5e7eb; padding-bottom: 5px; }
-                code {
-                  background: #f3f4f6;
-                  padding: 2px 6px;
-                  border-radius: 3px;
-                  font-family: 'Monaco', 'Courier New', monospace;
-                  font-size: 0.9em;
-                }
-                pre {
-                  background: #1f2937;
-                  color: #f3f4f6;
-                  padding: 15px;
-                  border-radius: 6px;
-                  overflow-x: auto;
-                }
-                pre code {
-                  background: transparent;
-                  padding: 0;
-                  color: inherit;
-                }
-                a {
-                  color: #2563eb;
-                  text-decoration: none;
-                }
-                a:hover {
-                  text-decoration: underline;
-                }
-              </style>
-            </head>
-            <body>
-              ${htmlContent}
-            </body>
-            </html>
-          `;
-
-          return new Response(docsHtml, {
-            headers: { "Content-Type": "text/html" },
+          return new Response(guideContent, {
+            headers: { "Content-Type": "text/markdown; charset=utf-8" },
           });
         } catch (error: any) {
-          return new Response(`Error loading documentation: ${error.message}`, {
+          return new Response(`Error loading guide: ${error.message}`, {
             status: 500,
             headers: { "Content-Type": "text/plain" },
           });
@@ -326,11 +284,11 @@ const server = Bun.serve({
         }
 
         try {
-          // Stage 1: Fetch page data (skip expensive operations for speed)
-          const pageData = await getPageData(targetUrl, {
+          // Stage 1: Fetch page data using smart fetcher (auto-selects best method)
+          const pageData = await fetchPageData(targetUrl, {
             extractVisibility: false,  // Skip - not needed for rendering
             extractImages: false,       // Skip - not needed for rendering
-            extractCss: false,          // Skip - not needed for rendering
+            extractCss: true,           // Extract CSS to preserve original styling
           });
 
           // Stage 2: Select and execute renderer
@@ -464,7 +422,7 @@ const server = Bun.serve({
 
         try {
           // Fetch page data
-          let { html } = await getPageData(targetUrl);
+          let { html } = await fetchPageData(targetUrl);
 
           // Transform images to absolute URLs
           html = transformImagesToAbsolute(html, targetUrl);
@@ -506,7 +464,7 @@ const server = Bun.serve({
 
         try{
           // Fetch page data
-          const { html } = await getPageData(targetUrl);
+          const { html } = await fetchPageData(targetUrl);
 
           // Extract all links
           const links = extractAllLinks(html, targetUrl);
@@ -555,7 +513,7 @@ const server = Bun.serve({
 
         try {
           // Fetch page data with CSS info only
-          const pageData = await getPageData(targetUrl, { extractCss: true });
+          const pageData = await fetchPageData(targetUrl, { extractCss: true });
 
           if (!pageData.cssInfo) {
             return jsonResponse({ error: "CSS information not available" }, 500);
@@ -614,7 +572,7 @@ const server = Bun.serve({
 
         try {
           // Fetch page data with image info only
-          const pageData = await getPageData(targetUrl, { extractImages: true });
+          const pageData = await fetchPageData(targetUrl, { extractImages: true });
 
           if (!pageData.imageInfo) {
             return jsonResponse({ error: "Image information not available" }, 500);
@@ -685,7 +643,7 @@ const server = Bun.serve({
 
         try {
           // Fetch page data with visibility info only
-          const pageData = await getPageData(targetUrl, { extractVisibility: true });
+          const pageData = await fetchPageData(targetUrl, { extractVisibility: true });
 
           if (!pageData.visibilityInfo) {
             return jsonResponse({ error: "Visibility information not available" }, 500);
@@ -761,6 +719,71 @@ const server = Bun.serve({
         }));
 
         return jsonResponse({ renderers });
+      },
+    },
+    "/markdown": {
+      GET: async (req) => {
+        // Check auth if enabled
+        if (AUTH_ENABLED) {
+          const authError = requireAuth(req);
+          if (authError) return authError;
+        }
+
+        const url = new URL(req.url);
+        const targetUrl = url.searchParams.get("q");
+        const usePandoc = url.searchParams.get("pandoc") !== "false"; // Default to true
+
+        if (!targetUrl) {
+          return jsonResponse({ error: "Missing 'q' parameter with URL" }, 400);
+        }
+
+        try {
+          // Fetch page data using smart fetcher
+          const pageData = await fetchPageData(targetUrl);
+
+          // Process with appropriate renderer
+          const renderer = rendererRegistry.selectRenderer(targetUrl);
+          console.log(`[Markdown] Using renderer: ${renderer.name} for ${targetUrl}`);
+
+          const processed = await renderer.process(pageData, targetUrl);
+
+          // Convert to markdown
+          let markdown: string;
+          if (!pandocAvailable) {
+            throw new Error("Pandoc service is not available. Please check PANDOC_SERVICE_URL environment variable.");
+          }
+
+          if (usePandoc) {
+            console.log("[Markdown] Using Pandoc service for conversion");
+            markdown = await pandocConvert(processed.html);
+          } else {
+            // Use pandoc service for plain HTML conversion (no processing)
+            console.log("[Markdown] Using Pandoc service (direct HTML conversion)");
+            const { parseDocument } = await import("linkedom");
+            const doc = parseDocument(processed.html);
+            const bodyHTML = doc.body?.innerHTML || processed.html;
+            markdown = await pandocConvert(bodyHTML);
+          }
+
+          // Return as plain text or JSON based on Accept header
+          const accept = req.headers.get("accept") || "";
+          if (accept.includes("application/json")) {
+            return jsonResponse({
+              url: targetUrl,
+              markdown,
+              metadata: processed.metadata,
+              rendererUsed: processed.rendererName,
+              converterUsed: usePandoc && pandocAvailable ? "pandoc" : "built-in",
+            });
+          } else {
+            return new Response(markdown, {
+              headers: { "Content-Type": "text/markdown; charset=utf-8" },
+            });
+          }
+        } catch (error: any) {
+          console.error(`Error converting ${targetUrl} to markdown:`, error);
+          return jsonResponse({ error: error.message }, 500);
+        }
       },
     },
     "/docs": {
@@ -944,11 +967,11 @@ document.head.appendChild(style_${cssOut.hash});`;
       }
 
       try {
-        // Stage 1: Fetch page data (skip expensive operations for speed)
-        const pageData = await getPageData(targetUrl, {
+        // Stage 1: Fetch page data using smart fetcher
+        const pageData = await fetchPageData(targetUrl, {
           extractVisibility: false,
           extractImages: false,
-          extractCss: false,
+          extractCss: true,  // Extract CSS to preserve original styling
         });
 
         // Stage 2: Select and execute renderer

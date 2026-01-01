@@ -172,6 +172,25 @@ export function extractAllLinks(html: string, baseUrl: string): LinkInfo[] {
 export function transformImagesToAbsolute(html: string, baseUrl: string): string {
   const { document } = parseHTML(html);
 
+  // Ensure baseUrl is treated as a directory for relative URL resolution
+  // If the URL doesn't end with / and doesn't have a file extension, add /
+  const normalizedBaseUrl = (() => {
+    if (baseUrl.endsWith('/')) return baseUrl;
+    const url = new URL(baseUrl);
+    const pathParts = url.pathname.split('/');
+    const lastPart = pathParts[pathParts.length - 1];
+
+    // Check if it looks like a file (has a common file extension)
+    const fileExtensions = ['.html', '.htm', '.php', '.asp', '.aspx', '.jsp', '.pdf', '.xml', '.json'];
+    const hasFileExtension = fileExtensions.some(ext => lastPart.toLowerCase().endsWith(ext));
+
+    // If no file extension, treat as directory and add trailing slash
+    if (!hasFileExtension) {
+      return baseUrl + '/';
+    }
+    return baseUrl;
+  })();
+
   // Convert img src to absolute
   document.querySelectorAll('img[src]').forEach((img: Element) => {
     const src = img.getAttribute('src');
@@ -183,7 +202,7 @@ export function transformImagesToAbsolute(html: string, baseUrl: string): string
     }
 
     try {
-      const absoluteUrl = new URL(src, baseUrl).href;
+      const absoluteUrl = new URL(src, normalizedBaseUrl).href;
       img.setAttribute('src', absoluteUrl);
     } catch {
       // Invalid URL, skip
@@ -205,7 +224,7 @@ export function transformImagesToAbsolute(html: string, baseUrl: string): string
         }
 
         try {
-          const absoluteUrl = new URL(url, baseUrl).href;
+          const absoluteUrl = new URL(url, normalizedBaseUrl).href;
           return descriptor ? `${absoluteUrl} ${descriptor}` : absoluteUrl;
         } catch {
           return part;
@@ -228,7 +247,7 @@ export function transformImagesToAbsolute(html: string, baseUrl: string): string
     }
 
     try {
-      const absoluteUrl = new URL(href, baseUrl).href;
+      const absoluteUrl = new URL(href, normalizedBaseUrl).href;
       if (img.hasAttribute('href')) {
         img.setAttribute('href', absoluteUrl);
       }
@@ -255,7 +274,7 @@ export function transformImagesToAbsolute(html: string, baseUrl: string): string
         }
 
         try {
-          const absoluteUrl = new URL(url, baseUrl).href;
+          const absoluteUrl = new URL(url, normalizedBaseUrl).href;
           return descriptor ? `${absoluteUrl} ${descriptor}` : absoluteUrl;
         } catch {
           return part;
