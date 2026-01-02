@@ -21,6 +21,8 @@
     "docker:run": "docker run -p 3000:3000 downmark",
     "docker:up": "docker-compose up",
     "docker:down": "docker-compose down",
+    "vercel-build": "bun run build:frontend",
+    "deploy:vercel": "vercel --prod",
     "tsc":"bunx tsc --noEmit"
   },
   "devDependencies": {
